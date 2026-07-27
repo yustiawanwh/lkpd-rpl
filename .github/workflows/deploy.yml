@@ -1,0 +1,56 @@
+# Otomatis membangun aplikasi dan menayangkannya ke GitHub Pages.
+# Berjalan tiap kali ada perubahan di cabang "main".
+name: Tayangkan ke GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:      # bisa juga dijalankan manual dari tab Actions
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ambil kode
+        uses: actions/checkout@v4
+
+      - name: Siapkan Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Pasang dependensi
+        run: npm install
+
+      - name: Bangun aplikasi
+        run: npm run build
+        env:
+          # Alamat & kunci Supabase diambil dari "Secrets" repositori.
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          # base path otomatis = "/nama-repo/", diambil dari nama repositori.
+          VITE_BASE: /${{ github.event.repository.name }}/
+
+      - name: Siapkan Pages
+        uses: actions/configure-pages@v4
+
+      - name: Unggah hasil build
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Tayangkan
+        id: deployment
+        uses: actions/deploy-pages@v4
