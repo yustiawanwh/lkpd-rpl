@@ -132,30 +132,51 @@ window.addEventListener('hashchange', gambar)
    Mulai
    ========================================================== */
 ;(async function mulai() {
-  // Diagnostik sementara: tampilkan langkah di layar agar terlihat di mana macet.
   const tandai = (t) => {
     const p = document.querySelector('.muat-awal p')
     if (p) p.textContent = t
   }
   try {
-    tandai('1/4 memeriksa sesi…')
-    const sesiP = sb.auth.getSession()
-    const { data: { session } } = await Promise.race([
-      sesiP,
-      new Promise((_, rej) => setTimeout(() => rej(new Error('getSession lambat')), 8000)),
-    ])
+    tandai('Memeriksa sesi…')
+    let session = null
+    try {
+      const { data } = await Promise.race([
+        sb.auth.getSession(),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('sesi-lambat')), 6000)),
+      ])
+      session = data?.session ?? null
+    } catch (e) {
+      // getSession menggantung (mis. token rusak & penyegaran gagal).
+      // Bersihkan sesi yang bermasalah lalu tampilkan halaman masuk,
+      // daripada layar tersangkut selamanya.
+      console.error('Sesi bermasalah, membersihkan:', e?.message ?? e)
+      try {
+        // Hapus token tersimpan agar tidak memicu penyegaran yang menggantung.
+        await Promise.race([
+          sb.auth.signOut({ scope: 'local' }),
+          new Promise((r) => setTimeout(r, 2000)),
+        ])
+      } catch (_) { /* abaikan */ }
+      // Bersihkan juga penyimpanan lokal Supabase secara langsung.
+      try {
+        Object.keys(localStorage)
+          .filter((k) => k.startsWith('sb-') || k.includes('supabase'))
+          .forEach((k) => localStorage.removeItem(k))
+      } catch (_) { /* abaikan */ }
+      keadaan.profil = null
+      gambar()      // tampilkan halaman masuk
+      return
+    }
 
     if (session) {
-      tandai('2/4 memuat profil…')
+      tandai('Memuat profil…')
       await Promise.race([
         muatProfil(),
         new Promise((r) => setTimeout(r, 8000)),
       ])
     }
 
-    tandai('3/4 menampilkan halaman…')
     await gambar()
-    tandai('4/4 selesai')
   } catch (err) {
     tandai('Gagal: ' + (err?.message ?? err))
     throw err
