@@ -35,17 +35,39 @@ export async function profilSaya() {
   const { data: { user } } = await sb.auth.getUser()
   if (!user) return null
 
-  const { data, error } = await sb
-    .from('profil')
-    .select('*')
-    .eq('id', user.id)
-    .single()
-
-  if (error) {
-    console.error('Gagal memuat profil:', error.message)
-    return null
+  // maybeSingle: mengembalikan null (bukan error) bila baris belum ada,
+  // sehingga tidak melempar "Cannot coerce the result to a single JSON object"
+  // saat profil baru belum sempat dibuat oleh trigger basis data.
+  const ambil = async () => {
+    const { data, error } = await sb
+      .from('profil').select('*').eq('id', user.id).maybeSingle()
+    if (error) { console.error('Gagal memuat profil:', error.message); return undefined }
+    return data
   }
-  return data
+
+  let data = await ambil()
+
+  // Bila profil belum ada (mis. baru mendaftar & trigger sedikit terlambat,
+  // atau trigger belum terpasang), coba buatkan lalu ambil ulang.
+  if (data === null) {
+    const nama = user.user_metadata?.nama
+      || user.user_metadata?.full_name
+      || (user.email ? user.email.split('@')[0] : 'Pengguna')
+    // Upsert aman: bila trigger sudah membuatnya, ini tidak menimpa.
+    await sb.from('profil')
+      .upsert({ id: user.id, nama, email: user.email, peran: 'murid' },
+              { onConflict: 'id', ignoreDuplicates: true })
+      .select().maybeSingle()
+      .catch(() => {})
+    // Ambil ulang (beri satu percobaan tambahan bila masih kosong).
+    data = await ambil()
+    if (data === null) {
+      await new Promise(r => setTimeout(r, 400))
+      data = await ambil()
+    }
+  }
+
+  return data ?? null
 }
 
 export async function keluar() {
