@@ -97,9 +97,9 @@ export async function keluar() {
 /* ==========================================================
    Sesi
    ========================================================== */
-async function muatProfil() {
+async function muatProfil(user) {
   try {
-    keadaan.profil = await profilSaya()
+    keadaan.profil = await profilSaya(user)
   } catch (err) {
     console.error('Gagal memuat profil:', err)
     keadaan.profil = null
@@ -109,20 +109,30 @@ async function muatProfil() {
 /**
  * Perubahan sesi bisa datang dari mana saja: masuk, keluar, penyegaran
  * token, atau kembali dari Google. Satu penangan untuk semuanya.
+ *
+ * PENTING: callback ini TIDAK memanggil getUser()/getSession() dan tidak
+ * menahan pekerjaan berat di dalam callback. Memanggil fungsi auth lain di
+ * dalam sini menyebabkan DEADLOCK. Kita pakai `sesi.user` yang sudah tersedia,
+ * dan menjalankan pemuatan profil DI LUAR callback (via setTimeout 0).
  */
-sb.auth.onAuthStateChange(async (peristiwa, sesi) => {
+sb.auth.onAuthStateChange((peristiwa, sesi) => {
   if (peristiwa === 'SIGNED_OUT' || !sesi) {
     keadaan.profil = null
     gambar()
     return
   }
 
-  if (peristiwa === 'SIGNED_IN' || peristiwa === 'INITIAL_SESSION') {
-    await muatProfil()
-    gambar()
+  if (peristiwa === 'SIGNED_IN') {
+    const user = sesi.user
+    // Tunda ke luar callback agar tidak memicu kebuntuan auth.
+    setTimeout(async () => {
+      await muatProfil(user)
+      gambar()
+    }, 0)
     return
   }
 
+  // INITIAL_SESSION ditangani oleh mulai() di bawah, tidak perlu di sini.
   // TOKEN_REFRESHED & USER_UPDATED tidak perlu menggambar ulang.
 })
 
@@ -171,7 +181,7 @@ window.addEventListener('hashchange', gambar)
     if (session) {
       tandai('Memuat profil…')
       await Promise.race([
-        muatProfil(),
+        muatProfil(session.user),
         new Promise((r) => setTimeout(r, 8000)),
       ])
     }
