@@ -31,8 +31,17 @@ export const sb = createClient(URL, ANON, {
 })
 
 /** Profil pengguna yang sedang masuk, atau null. */
-export async function profilSaya() {
-  const { data: { user } } = await sb.auth.getUser()
+export async function profilSaya(userDiberi) {
+  // PENTING: jangan panggil getUser()/getSession() bila fungsi ini dipanggil
+  // dari dalam callback onAuthStateChange — itu menyebabkan DEADLOCK (auth
+  // saling menunggu kunci). Karena itu pemanggil WAJIB memberi objek user
+  // (dari sesi yang sudah ada). getUser() hanya dipakai sebagai cadangan
+  // di luar callback.
+  let user = userDiberi
+  if (!user) {
+    const { data } = await sb.auth.getUser()
+    user = data?.user ?? null
+  }
   if (!user) return null
 
   // maybeSingle: mengembalikan null (bukan error) bila baris belum ada.
