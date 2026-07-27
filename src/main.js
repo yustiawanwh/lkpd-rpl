@@ -134,7 +134,14 @@ window.addEventListener('hashchange', gambar)
 ;(async function mulai() {
   const { data: { session } } = await sb.auth.getSession()
 
-  if (session) await muatProfil()
+  if (session) {
+    // Jaring pengaman: jangan biarkan pemuatan profil menggantung selamanya.
+    // Bila lebih dari 8 detik, lanjutkan saja agar layar tidak macet.
+    await Promise.race([
+      muatProfil(),
+      new Promise((r) => setTimeout(r, 8000)),
+    ])
+  }
 
   // Bila Supabase belum sempat memicu INITIAL_SESSION, gambar sendiri.
   gambar()
