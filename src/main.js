@@ -132,19 +132,34 @@ window.addEventListener('hashchange', gambar)
    Mulai
    ========================================================== */
 ;(async function mulai() {
-  const { data: { session } } = await sb.auth.getSession()
-
-  if (session) {
-    // Jaring pengaman: jangan biarkan pemuatan profil menggantung selamanya.
-    // Bila lebih dari 8 detik, lanjutkan saja agar layar tidak macet.
-    await Promise.race([
-      muatProfil(),
-      new Promise((r) => setTimeout(r, 8000)),
-    ])
+  // Diagnostik sementara: tampilkan langkah di layar agar terlihat di mana macet.
+  const tandai = (t) => {
+    const p = document.querySelector('.muat-awal p')
+    if (p) p.textContent = t
   }
+  try {
+    tandai('1/4 memeriksa sesi…')
+    const sesiP = sb.auth.getSession()
+    const { data: { session } } = await Promise.race([
+      sesiP,
+      new Promise((_, rej) => setTimeout(() => rej(new Error('getSession lambat')), 8000)),
+    ])
 
-  // Bila Supabase belum sempat memicu INITIAL_SESSION, gambar sendiri.
-  gambar()
+    if (session) {
+      tandai('2/4 memuat profil…')
+      await Promise.race([
+        muatProfil(),
+        new Promise((r) => setTimeout(r, 8000)),
+      ])
+    }
+
+    tandai('3/4 menampilkan halaman…')
+    await gambar()
+    tandai('4/4 selesai')
+  } catch (err) {
+    tandai('Gagal: ' + (err?.message ?? err))
+    throw err
+  }
 })().catch((err) => {
   console.error(err)
   isi(akar, el('div', { class: 'masuk-latar' },
