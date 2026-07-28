@@ -39,6 +39,135 @@ export async function simpanIsian(penugasanId, muridId, lembarId, data) {
 }
 
 /**
+ * Penyimpan andal untuk isian tabel — dirancang tahan internet lambat/putus.
+ *
+ * Fitur:
+ *  - Menggabungkan perubahan beruntun (debounce) agar hemat permintaan.
+ *  - Mencoba ulang otomatis bila gagal (jeda bertambah: 1s, 2s, 4s, …).
+ *  - Menunggu koneksi kembali bila sedang offline, lalu menyimpan.
+ *  - Melapor status lewat callback: 'menyimpan' | 'tersimpan' | 'gagal' |
+ *    'menunggu-koneksi' | 'akan-coba-lagi'.
+ *  - flush(): memaksa simpan segera & menunggu selesai (untuk saat menutup).
+ *  - adaTertunda(): true bila masih ada perubahan yang belum tersimpan.
+ *
+ * @param simpanFn  async (data) => void   (melempar error bila gagal)
+ * @param laporFn   (status, info) => void
+ */
+export function buatPenyimpan(simpanFn, laporFn = () => {}) {
+  let jedaTimer = null
+  let dataTertunda = null       // data terbaru yang menunggu disimpan
+  let sedangJalan = false       // sedang ada proses simpan berjalan
+  let versiTerkirim = 0         // nomor versi untuk mendeteksi perubahan baru
+  let versiTerakhir = 0
+  let percobaan = 0
+  const MAKS_JEDA = 15000
+
+  function adaTertunda() {
+    return dataTertunda !== null || sedangJalan
+  }
+
+  function jadwalkan(data, jeda = 700) {
+    dataTertunda = data
+    versiTerakhir++
+    laporFn('menyimpan')
+    clearTimeout(jedaTimer)
+    jedaTimer = setTimeout(jalankan, jeda)
+  }
+
+  async function jalankan() {
+    if (sedangJalan) return           // biarkan proses berjalan menyelesaikan
+    if (dataTertunda === null) return
+
+    // Bila offline, tunggu online lalu ulangi.
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      laporFn('menunggu-koneksi')
+      tungguOnline()
+      return
+    }
+
+    sedangJalan = true
+    const dataIni = dataTertunda
+    const versiIni = versiTerakhir
+    dataTertunda = null
+    versiTerkirim = versiIni
+    laporFn('menyimpan')
+
+    try {
+      await simpanFn(dataIni)
+      sedangJalan = false
+      percobaan = 0
+      // Bila ada perubahan LEBIH BARU sejak pengiriman ini, simpan lagi.
+      if (versiTerakhir !== versiIni || dataTertunda !== null) {
+        jalankan()
+      } else {
+        laporFn('tersimpan')
+      }
+    } catch (err) {
+      sedangJalan = false
+      // Kembalikan data ini sebagai tertunda (bila belum ada yang lebih baru).
+      if (dataTertunda === null) dataTertunda = dataIni
+      percobaan++
+      const jeda = Math.min(1000 * 2 ** (percobaan - 1), MAKS_JEDA)
+      laporFn('akan-coba-lagi', { percobaan, jeda, err })
+      clearTimeout(jedaTimer)
+      jedaTimer = setTimeout(jalankan, jeda)
+    }
+  }
+
+  let penungguOnline = null
+  function tungguOnline() {
+    if (penungguOnline) return
+    penungguOnline = () => {
+      window.removeEventListener('online', penungguOnline)
+      penungguOnline = null
+      percobaan = 0
+      jalankan()
+    }
+    if (typeof window !== 'undefined') window.addEventListener('online', penungguOnline)
+  }
+
+  /** Paksa simpan segera & tunggu sampai benar-benar tersimpan (atau gagal). */
+  async function flush() {
+    clearTimeout(jedaTimer)
+    // Tunggu proses berjalan selesai, lalu pastikan sisa tertunda tersimpan.
+    let putaran = 0
+    while (adaTertunda() && putaran < 20) {
+      putaran++
+      if (!sedangJalan && dataTertunda !== null) {
+        await jalankanSekali()
+      } else {
+        await new Promise(r => setTimeout(r, 150))
+      }
+    }
+    return !adaTertunda()
+  }
+
+  // Versi jalankan yang menunggu hasilnya (untuk flush).
+  async function jalankanSekali() {
+    if (dataTertunda === null) return
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      throw new Error('offline')
+    }
+    sedangJalan = true
+    const dataIni = dataTertunda
+    dataTertunda = null
+    laporFn('menyimpan')
+    try {
+      await simpanFn(dataIni)
+      sedangJalan = false
+      laporFn('tersimpan')
+    } catch (err) {
+      sedangJalan = false
+      if (dataTertunda === null) dataTertunda = dataIni
+      laporFn('gagal', { err })
+      throw err
+    }
+  }
+
+  return { jadwalkan, flush, adaTertunda }
+}
+
+/**
  * Penyimpanan otomatis dengan jeda.
  * Tanpa jeda, tiap ketikan akan mengirim satu permintaan ke server.
  */
@@ -82,21 +211,38 @@ export function buatTabelIsi(lembar, ctx) {
       el('p', {}, 'Struktur tabel ini belum lengkap. Sampaikan ke gurumu.'))
   }
 
-  const simpan = simpanTertunda(700)
   let tanda = null
 
-  async function kirim() {
-    if (tanda) tanda.textContent = 'Menyimpan…'
-    simpan.jadwalkan(async () => {
-      try {
-        await simpanIsian(ctx.penugasanId, ctx.muridId, lembar.id, data)
-        if (tanda) { tanda.textContent = 'Tersimpan'; tanda.classList.add('aktif')
-                     setTimeout(() => tanda.classList.remove('aktif'), 1400) }
-      } catch (err) {
-        if (tanda) tanda.textContent = 'Gagal menyimpan'
-        roti(pesanGalat(err), '⚠')
-      }
-    })
+  // Perbarui tampilan status penyimpanan dengan jujur & jelas.
+  function lapor(status, info) {
+    if (!tanda) return
+    tanda.classList.remove('aktif', 'gagal', 'nunggu')
+    switch (status) {
+      case 'menyimpan':
+        tanda.textContent = 'Menyimpan…'; break
+      case 'tersimpan':
+        tanda.textContent = '✓ Tersimpan'; tanda.classList.add('aktif')
+        setTimeout(() => { if (tanda && tanda.textContent === '✓ Tersimpan') tanda.classList.remove('aktif') }, 1400)
+        break
+      case 'menunggu-koneksi':
+        tanda.textContent = '⚠ Menunggu koneksi…'; tanda.classList.add('nunggu'); break
+      case 'akan-coba-lagi':
+        tanda.textContent = `⚠ Gagal — mencoba lagi (${info?.percobaan})…`; tanda.classList.add('nunggu'); break
+      case 'gagal':
+        tanda.textContent = '✗ Belum tersimpan'; tanda.classList.add('gagal'); break
+    }
+  }
+
+  const penyimpan = buatPenyimpan(
+    (d) => simpanIsian(ctx.penugasanId, ctx.muridId, lembar.id, d),
+    lapor,
+  )
+  // Diekspos agar tiket/halaman bisa memaksa simpan & memeriksa status.
+  ctx.penyimpan = penyimpan
+
+  function kirim() {
+    // Kirim salinan data terkini agar retry memakai versi yang benar.
+    penyimpan.jadwalkan({ ...data }, 700)
   }
 
   function ubah(baris, kunci, nilai) {
@@ -166,9 +312,23 @@ export function buatTabelIsi(lembar, ctx) {
   }
 
   tanda = el('span', { class: 'simpan-tanda' }, 'Tersimpan otomatis')
-  return el('div', {},
+  const bungkus = el('div', {},
     el('div', { gaya: { display: 'flex', justifyContent: 'flex-end', marginBottom: '6px' } }, tanda),
     el('div', { class: 'tabel-bungkus' }, tabel))
+
+  // Bila pemanggil ingin bisa mengubah status baca-saja secara dinamis
+  // (mis. mengikuti timer di tiket), sediakan API. Ini menonaktifkan atau
+  // mengaktifkan seluruh input di dalam tabel tanpa membangun ulang.
+  bungkus.setBacaSaja = (nonaktif) => {
+    bungkus.querySelectorAll('input, textarea, select, .tri button')
+      .forEach((elm) => { elm.disabled = !!nonaktif })
+    bungkus.classList.toggle('tabel-terkunci-timer', !!nonaktif)
+  }
+  // Ekspos penyimpan andal agar pemanggil bisa memaksa simpan (flush) saat
+  // menutup/pindah, dan memeriksa apakah masih ada perubahan tertunda.
+  bungkus.flush = () => penyimpan.flush()
+  bungkus.adaTertunda = () => penyimpan.adaTertunda()
+  return bungkus
 }
 
 /** Muat satu lembar (berdasarkan kode) untuk sebuah TP + isiannya. */

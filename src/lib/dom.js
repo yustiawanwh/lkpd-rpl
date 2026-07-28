@@ -68,7 +68,7 @@ export function roti(pesan, ikon = '✓') {
  * Menampilkan dialog. Mengembalikan fungsi penutup.
  * Fokus dikembalikan ke elemen semula agar nyaman bagi pengguna papan tik.
  */
-export function dialog({ judul, badan, kaki, lebar }) {
+export function dialog({ judul, badan, kaki, lebar, bisaTutup }) {
   const fokusSemula = document.activeElement
 
   const kotak = el('div', { class: 'dialog', role: 'dialog', 'aria-modal': 'true',
@@ -96,7 +96,12 @@ export function dialog({ judul, badan, kaki, lebar }) {
     }
   }
 
-  function tutup() {
+  async function tutup() {
+    // Bila ada penjaga (mis. isian belum tersimpan), tanya dulu.
+    if (bisaTutup) {
+      const boleh = await bisaTutup()
+      if (!boleh) return
+    }
     document.removeEventListener('keydown', padaTombol)
     tirai.remove()
     document.body.style.overflow = ''

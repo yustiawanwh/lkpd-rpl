@@ -168,8 +168,9 @@ export async function halamanNilai(wadah, penugasanId) {
 
     return el('div', {},
       el('div', { class: 'pesan pesan-info', gaya: { marginBottom: '14px' } },
-        'Nilai tiap sprint dihitung dari ketuntasan tugas inti pada sprint itu saja ' +
-        '(tuntas semua inti sprint = 100). Cocok untuk nilai harian, karena satu sprint = satu hari kerja.'),
+        'Nilai tiap sprint adalah gabungan berbobot: nilai review guru (A–E), badge, ' +
+        'dan kecepatan pengumpulan. Nilai baru muncul setelah guru menilai tugas — ' +
+        'sebelum dinilai, nilai sprint masih 0. Arahkan kursor ke angka untuk melihat rinciannya.'),
       baris.length && sprints.length
         ? el('div', { class: 'panel' },
             el('div', { class: 'tabel-bungkus' },
@@ -186,9 +187,12 @@ export async function halamanNilai(wadah, penugasanId) {
                     el('td', { class: 'utama' }, r.profil?.nama ?? '—'),
                     ...sprints.map(s => {
                       const v = r.nilaiSprint[s.id]
+                      const rc = v.rincian ?? {}
+                      const info = `${v.dinilai}/${v.total} inti dinilai · ` +
+                        `review ${rc.review ?? 0}, badge ${rc.badge ?? 0}, kecepatan ${rc.kecepatan ?? 0}`
                       return el('td', { class: 'angka',
                         gaya: { color: warnaNilai(v.nilai) } },
-                        el('span', { title: `${v.selesai}/${v.total} inti` }, String(v.nilai)))
+                        el('span', { title: info }, String(v.nilai)))
                     }),
                     el('td', { class: 'angka', gaya: { fontWeight: '700' } }, String(rata)),
                   )

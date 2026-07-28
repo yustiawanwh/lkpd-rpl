@@ -102,6 +102,8 @@ export function dialogTiket(tugas, saatBerubah) {
 
   // Tugas terkunci: seluruh input (timer, catatan, bukti) dinonaktifkan.
   const terkunci = pr.terkunci === true
+  let tabelIsiApi = null       // API tabel isian (untuk kunci mengikuti timer)
+  let petunjukKerja = null     // banner petunjuk "tekan Mulai dulu"
 
   const est = (tugas.estimasi_menit ?? 0) * 60
 
@@ -121,6 +123,29 @@ export function dialogTiket(tugas, saatBerubah) {
       + (timerAktif() === tugas.id ? ' jalan' : '')
       + (est && detik > est ? ' lewat' : '')
     tblTimer.textContent = timerAktif() === tugas.id ? '⏸ Jeda' : '▶ Mulai'
+    perbaruiKunciIsi()
+  }
+
+  // Poin 4: isian hanya boleh diisi saat timer BERJALAN untuk tugas ini
+  // (dan tugas tidak terkunci nilai/guru). Saat belum start atau dijeda,
+  // isian dinonaktifkan agar murid tidak mengisi tanpa "bekerja".
+  const sedangKerja = () => timerAktif() === tugas.id && !terkunci
+  function perbaruiKunciIsi() {
+    const boleh = sedangKerja()
+    if (catatan) catatan.disabled = !boleh
+    if (kotakUnggah && !terkunci) {
+      kotakUnggah.disabled = !boleh
+      const ket = $('.unggah-ket', kotakUnggah)
+      if (ket && !kotakUnggah.classList.contains('ada')) {
+        ket.textContent = boleh
+          ? (tugas.bukti_diminta ?? 'PNG atau JPG, maksimal 5 MB')
+          : 'Tekan “Mulai” dulu untuk mengaktifkan'
+      }
+    }
+    // Tabel di dalam tiket: aktif/nonaktif mengikuti timer.
+    if (tabelIsiApi?.setBacaSaja) tabelIsiApi.setBacaSaja(!boleh)
+    // Petunjuk di area isian.
+    if (petunjukKerja) petunjukKerja.style.display = boleh ? 'none' : ''
   }
 
   async function toggleTimer() {
@@ -159,22 +184,24 @@ export function dialogTiket(tugas, saatBerubah) {
   }, 700)
 
   const tandaCat = el('span', { class: 'simpan-tanda' }, 'Tersimpan otomatis')
+  const bolehAwal = timerAktif() === tugas.id && !terkunci
   const catatan = el('textarea', {
     rows: '3', 'aria-label': 'Catatan kerja',
     placeholder: 'Apa yang kamu kerjakan, kendala yang muncul, dan cara mengatasinya…',
-    disabled: terkunci,
+    disabled: terkunci || !bolehAwal,
     onInput: (e) => { tandaCat.textContent = 'Menyimpan…'; simpanCat(e.target.value) },
   }, pr.catatan ?? '')
 
   /* ---- Bukti ---- */
   const berkasInput = el('input', { type: 'file', accept: 'image/*', hidden: true,
                                      onChange: pilihBerkas })
-  const kotakUnggah = el('button', { class: 'unggah', disabled: terkunci,
-                                      onClick: () => { if (!terkunci) berkasInput.click() } },
+  const kotakUnggah = el('button', { class: 'unggah', disabled: terkunci || !bolehAwal,
+                                      onClick: () => { if (sedangKerja()) berkasInput.click() } },
     el('div', { class: 'unggah-judul' }, terkunci ? 'Bukti terkunci' : 'Pilih tangkapan layar'),
     el('div', { class: 'unggah-ket' }, terkunci
       ? 'Tugas sudah dikunci — bukti tidak bisa diganti'
-      : (tugas.bukti_diminta ?? 'PNG atau JPG, maksimal 5 MB')),
+      : (bolehAwal ? (tugas.bukti_diminta ?? 'PNG atau JPG, maksimal 5 MB')
+                   : 'Tekan “Mulai” dulu untuk mengaktifkan')),
   )
   const pratinjau = el('div')
 
@@ -305,23 +332,43 @@ export function dialogTiket(tugas, saatBerubah) {
             'mengerjakan bagian lain; sampaikan ke gurumu bila tabelnya diperlukan.'))
         return
       }
+      const tabelEl = buatTabelIsi(lembar, {
+        penugasanId: penId, muridId: keadaan.profil.id,
+        el, $, $$, LK, roti, pesanGalat,
+        bacaSaja: tugas.progres?.terkunci === true,
+      })
+      // Simpan API agar bisa dikunci/dibuka mengikuti timer (poin 4).
+      tabelIsiApi = tabelEl
       isi(wadahLembar,
         el('div', { class: 'bagian-judul' }, `Tabel ${lembar.kode} — ${lembar.judul}`),
         lembar.keterangan
           ? el('p', { gaya: { fontSize: '13px', color: 'var(--tinta-lembut)', margin: '0 0 8px' } }, lembar.keterangan)
           : null,
-        buatTabelIsi(lembar, {
-          penugasanId: penId, muridId: keadaan.profil.id,
-          el, $, $$, LK, roti, pesanGalat,
-          bacaSaja: tugas.progres?.terkunci === true,
-        }))
+        tabelEl)
+      // Terapkan status awal (terkunci bila timer belum jalan).
+      if (!terkunci) tabelIsiApi.setBacaSaja(!sedangKerja())
     } catch (err) {
       isi(wadahLembar, el('div', { class: 'pesan pesan-galat' }, pesanGalat(err)))
     }
   }
 
   /* ---- Susun dialog ---- */
+  const nilaiHuruf = pr.nilai_huruf
+  const umpanGuru = pr.umpan_balik
+  const LABEL_HURUF = { A: 'Sempurna', B: 'Bagus', C: 'Cukup', D: 'Kurang', E: 'Tidak lulus' }
+
   const badan = el('div', {},
+    // Poin 5: umpan balik & nilai dari guru terlihat oleh murid.
+    (nilaiHuruf || umpanGuru) && el('div', { class: 'umpan-guru' },
+      el('div', { class: 'umpan-guru-kepala' },
+        el('span', {}, '💬 Dari gurumu'),
+        nilaiHuruf && el('span', { class: 'lencana-nilai nilai-' + nilaiHuruf },
+          `Nilai ${nilaiHuruf}` + (LABEL_HURUF[nilaiHuruf] ? ` · ${LABEL_HURUF[nilaiHuruf]}` : ''))),
+      umpanGuru
+        ? el('div', { class: 'umpan-guru-isi' }, umpanGuru)
+        : el('div', { class: 'umpan-guru-isi', gaya: { fontStyle: 'italic', color: 'var(--tinta-lembut)' } },
+            'Tidak ada catatan tambahan.')),
+
     el('dl', { class: 'dl' },
       el('dt', {}, 'Status'), el('dd', {}, lencana),
       el('dt', {}, 'Estimasi'), el('dd', {}, tugas.estimasi_menit ? `${tugas.estimasi_menit} menit` : '—'),
@@ -334,9 +381,8 @@ export function dialogTiket(tugas, saatBerubah) {
       el('p', { gaya: { fontSize: '14px', lineHeight: '1.6', margin: 0 } }, tugas.deskripsi),
     ],
 
-    // Tabel yang harus diisi untuk tugas ini (bila ada kaitannya).
-    wadahLembar,
-
+    // Pelacak waktu DIPINDAH KE ATAS: murid menekan "Mulai" dulu, baru isian
+    // di bawahnya aktif (poin 4). Urutan ini lebih natural.
     tugas.estimasi_menit > 0 && [
       el('div', { class: 'bagian-judul' }, 'Pelacak waktu'),
       el('div', { class: 'waktu-kotak' },
@@ -350,6 +396,15 @@ export function dialogTiket(tugas, saatBerubah) {
         el('div', { class: 'waktu-tbl' }, tblTimer),
       ),
     ],
+
+    // Petunjuk: isian aktif hanya saat timer berjalan (poin 4).
+    !terkunci && (petunjukKerja = el('div', { class: 'pesan pesan-info',
+      gaya: { display: (timerAktif() === tugas.id) ? 'none' : '' } },
+      '⏱ Tekan “Mulai” pada pelacak waktu untuk mulai mengisi tabel, catatan, dan bukti. ' +
+      'Saat timer dijeda, isian terkunci lagi.')),
+
+    // Tabel yang harus diisi untuk tugas ini (bila ada kaitannya).
+    wadahLembar,
 
     el('div', { class: 'bagian-judul' }, 'Catatan kerja & kendala'),
     el('div', { class: 'ruas' }, catatan, tandaCat),
@@ -369,12 +424,35 @@ export function dialogTiket(tugas, saatBerubah) {
     : [
         el('button', { class: 'tbl tbl-kecil', onClick: () => setStatus('backlog') }, 'Backlog'),
         el('button', { class: 'tbl tbl-kecil', onClick: () => setStatus('dikerjakan') }, 'Dikerjakan'),
-        el('button', { class: 'tbl tbl-kecil', onClick: () => setStatus('review') }, 'Minta review'),
+        // "Minta review" adalah aksi UTAMA (agar dapat nilai) → hijau/menonjol.
         el('button', { class: 'tbl tbl-utama', gaya: { marginLeft: 'auto' },
+                       onClick: () => setStatus('review') }, 'Minta review'),
+        // "Tandai selesai" mengunci tugas → merah (hati-hati).
+        el('button', { class: 'tbl tbl-kecil tbl-bahaya',
                        onClick: () => setStatus('selesai') }, 'Tandai selesai'),
       ]
 
-  tutup = dialog({ judul: `${tugas.kode} — ${tugas.judul}`, badan, kaki, lebar: '640px' })
+  tutup = dialog({ judul: `${tugas.kode} — ${tugas.judul}`, badan, kaki, lebar: '640px',
+    bisaTutup: async () => {
+      // Pastikan isian tabel benar-benar tersimpan sebelum menutup.
+      if (tabelIsiApi?.adaTertunda && tabelIsiApi.adaTertunda()) {
+        roti('Menyimpan isian tabel dulu…', '⏳')
+        let ok = false
+        try { ok = await tabelIsiApi.flush() } catch (_) { ok = false }
+        if (!ok) {
+          const paksa = await konfirmasi({
+            judul: 'Isian belum tersimpan',
+            pesan: 'Sebagian isian tabel belum berhasil tersimpan (mungkin karena ' +
+                   'koneksi lambat). Kalau ditutup sekarang, isian terakhir bisa hilang. ' +
+                   'Tetap tutup?',
+            tombol: 'Tetap tutup', bahaya: true,
+          })
+          return paksa
+        }
+      }
+      return true
+    },
+  })
 
   // Muat bukti yang sudah ada
   ;(async () => {

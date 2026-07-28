@@ -23,6 +23,7 @@ export async function halamanGuru(wadah, r) {
   try {
     if (tampilan === 'kelas' && r.bagian[0]) await detilKelas(utama, Number(r.bagian[0]))
     else if (tampilan === 'nilai' && r.bagian[0]) await antreanReview(utama, Number(r.bagian[0]))
+    else if (tampilan === 'arsip' && r.bagian[0]) await arsipDinilai(utama, Number(r.bagian[0]))
     else if (tampilan === 'rekap' && r.bagian[0]) await halamanNilai(utama, Number(r.bagian[0]))
     else if (tampilan === 'awasi' && r.bagian[0]) await halamanPengawasan(utama, Number(r.bagian[0]))
     else if (tampilan === 'dashboard') await halamanDashboard(utama)
@@ -316,6 +317,8 @@ async function detilKelas(wadah, kelasId) {
                              onClick: () => bukaTutup(p) }, p.dibuka ? 'Tutup' : 'Buka'),
               el('button', { class: 'tbl tbl-kecil',
                              onClick: () => pergiKe(`nilai/${p.id}`) }, 'Review'),
+              el('button', { class: 'tbl tbl-kecil',
+                             onClick: () => pergiKe(`arsip/${p.id}`) }, 'Sudah Dinilai'),
               el('button', { class: 'tbl tbl-kecil',
                              onClick: () => pergiKe(`rekap/${p.id}`) }, 'Nilai'),
               el('button', { class: 'tbl tbl-kecil tbl-bahaya',
@@ -721,11 +724,36 @@ async function antreanReview(wadah, penugasanId) {
 
   const { data, error } = await sb
     .from('progres_tugas')
-    .select('id, status, detik_terpakai, catatan, diserahkan_pada, murid_id, tugas_id, nilai_huruf, umpan_balik, profil:murid_id(nama, no_absen), tugas(kode, judul, xp, estimasi_menit, bukti_diminta, lembar_kode)')
+    .select('id, status, detik_terpakai, catatan, diserahkan_pada, murid_id, tugas_id, nilai_huruf, umpan_balik, profil:murid_id(nama, no_absen), tugas(kode, judul, xp, estimasi_menit, bukti_diminta, lembar_kode, urutan, sprint(nomor, nama))')
     .eq('penugasan_id', penugasanId)
     .eq('status', 'review')
     .order('diserahkan_pada')
   if (error) throw error
+
+  // Kelompokkan per murid. Di dalam tiap murid, urut tugas dari sprint
+  // terkecil → terbesar (lalu urutan tugas). Antar murid: yang paling lama
+  // menunggu (tugas tertua) di paling atas.
+  const petaMurid = new Map()
+  for (const p of data) {
+    if (!petaMurid.has(p.murid_id)) {
+      petaMurid.set(p.murid_id, { murid_id: p.murid_id, profil: p.profil, tugas: [] })
+    }
+    petaMurid.get(p.murid_id).tugas.push(p)
+  }
+  const kelompok = [...petaMurid.values()]
+  for (const k of kelompok) {
+    k.tugas.sort((a, b) =>
+      (a.tugas?.sprint?.nomor ?? 0) - (b.tugas?.sprint?.nomor ?? 0)
+      || (a.tugas?.urutan ?? 0) - (b.tugas?.urutan ?? 0)
+      || (a.tugas?.kode ?? '').localeCompare(b.tugas?.kode ?? ''))
+    // Waktu tunggu tertua murid ini (untuk urutan antar murid).
+    k.tertua = k.tugas.reduce((min, t) => {
+      const d = t.diserahkan_pada ? new Date(t.diserahkan_pada).getTime() : Infinity
+      return Math.min(min, d)
+    }, Infinity)
+  }
+  // Murid dengan tugas tertua di paling atas.
+  kelompok.sort((a, b) => a.tertua - b.tertua)
 
   isi(wadah,
     el('div', { class: 'kepala' },
@@ -733,12 +761,25 @@ async function antreanReview(wadah, penugasanId) {
         el('button', { class: 'tbl tbl-kecil tbl-hantu', gaya: { padding: '2px 0', marginBottom: '4px' },
                        onClick: () => pergiKe(`kelas/${pen.kelas_id}`) }, '← Kembali ke kelas'),
         el('h1', {}, 'Menunggu review'),
-        el('p', {}, `${pen.kelas?.nama} · ${pen.tujuan_pembelajaran?.kode}`),
+        el('p', {}, `${pen.kelas?.nama} · ${pen.tujuan_pembelajaran?.kode}` +
+                    (data.length ? ` — ${data.length} tugas dari ${kelompok.length} murid` : '')),
       ),
     ),
 
     data.length
-      ? el('div', { class: 'tumpuk' }, ...data.map(p => kartuReview(p, penugasanId, wadah)))
+      ? el('div', { class: 'tumpuk-murid' }, ...kelompok.map(k =>
+          el('div', { class: 'grup-murid' },
+            el('div', { class: 'grup-murid-kepala' },
+              el('span', { class: 'avatar', gaya: { width: '30px', height: '30px', fontSize: '11px' } },
+                inisial(k.profil?.nama)),
+              el('div', {},
+                el('div', { gaya: { fontWeight: '600', fontSize: '14px' } }, k.profil?.nama ?? '—'),
+                el('div', { gaya: { fontSize: '11.5px', color: 'var(--tinta-lembut)' } },
+                  (k.profil?.no_absen ? `Absen ${k.profil.no_absen} · ` : '') +
+                  `${k.tugas.length} tugas menunggu`)),
+            ),
+            el('div', { class: 'tumpuk' }, ...k.tugas.map(p => kartuReview(p, penugasanId, wadah))),
+          )))
       : el('div', { class: 'panel' }, el('div', { class: 'kosong' },
           el('h3', {}, 'Tidak ada yang menunggu'),
           el('p', {}, 'Semua pekerjaan murid sudah diperiksa.'))),
@@ -750,9 +791,113 @@ async function antreanReview(wadah, penugasanId) {
   }
 }
 
+// Poin 6: arsip pekerjaan murid yang SUDAH dinilai. Guru tetap bisa melihat
+// hasil kerja (tabel + bukti), mengubah nilai, dan membuka kunci dari sini.
+async function arsipDinilai(wadah, penugasanId) {
+  const { data: pen } = await sb.from('penugasan')
+    .select('id, kelas_id, kelas(nama), tujuan_pembelajaran(id, kode, judul)')
+    .eq('id', penugasanId).single()
+
+  const { data, error } = await sb
+    .from('progres_tugas')
+    .select('id, status, detik_terpakai, catatan, diserahkan_pada, disetujui_pada, murid_id, tugas_id, nilai_huruf, umpan_balik, terkunci, profil:murid_id(nama, no_absen), tugas(kode, judul, xp, estimasi_menit, bukti_diminta, lembar_kode)')
+    .eq('penugasan_id', penugasanId)
+    .not('nilai_huruf', 'is', null)
+    .order('disetujui_pada', { ascending: false })
+  if (error) throw error
+
+  // Kelompokkan per murid untuk memudahkan penelusuran.
+  isi(wadah,
+    el('div', { class: 'kepala' },
+      el('div', {},
+        el('button', { class: 'tbl tbl-kecil tbl-hantu', gaya: { padding: '2px 0', marginBottom: '4px' },
+                       onClick: () => pergiKe(`kelas/${pen.kelas_id}`) }, '← Kembali ke kelas'),
+        el('h1', {}, 'Sudah Dinilai'),
+        el('p', {}, `${pen.kelas?.nama} · ${pen.tujuan_pembelajaran?.kode} — ${data.length} tugas telah dinilai`),
+      ),
+    ),
+
+    data.length
+      ? el('div', { class: 'tumpuk' }, ...data.map(p => kartuArsip(p, penugasanId, wadah)))
+      : el('div', { class: 'panel' }, el('div', { class: 'kosong' },
+          el('h3', {}, 'Belum ada yang dinilai'),
+          el('p', {}, 'Tugas yang sudah kamu beri nilai A–E akan muncul di sini, ' +
+                      'lengkap dengan hasil pekerjaan murid.'))),
+  )
+
+  for (const p of data) {
+    muatKoreksi(p, pen?.tujuan_pembelajaran?.id, penugasanId)
+  }
+}
+
+function kartuArsip(p, penugasanId, wadah) {
+  const LABEL = { A: 'Sempurna', B: 'Bagus', C: 'Cukup', D: 'Kurang', E: 'Tidak lulus' }
+  const umpan = el('textarea', { rows: '2', 'aria-label': 'Ubah umpan balik',
+    placeholder: 'Ubah umpan balik (opsional)' }, p.umpan_balik ?? '')
+
+  async function beriNilaiUlang(huruf) {
+    try {
+      const { error } = await sb.rpc('nilai_tugas', {
+        p_progres: p.id, p_huruf: huruf, p_umpan: umpan.value.trim() || null,
+      })
+      if (error) throw error
+      roti(`${p.tugas.kode} diperbarui menjadi ${huruf}`)
+      arsipDinilai(wadah, penugasanId)
+    } catch (err) { roti(pesanGalat(err), '⚠') }
+  }
+
+  async function bukaKunci() {
+    try {
+      const { error } = await sb.rpc('buka_kunci_tugas', { p_progres: p.id })
+      if (error) throw error
+      roti(`${p.tugas.kode} dibuka — murid bisa memperbaiki`)
+      arsipDinilai(wadah, penugasanId)
+    } catch (err) { roti(pesanGalat(err), '⚠') }
+  }
+
+  return el('div', { class: 'panel' },
+    el('div', { class: 'panel-isi' },
+      el('div', { gaya: { display: 'flex', gap: '12px', alignItems: 'flex-start', flexWrap: 'wrap' } },
+        el('div', { class: 'avatar' }, inisial(p.profil?.nama)),
+        el('div', { gaya: { flex: '1', minWidth: '180px' } },
+          el('div', { gaya: { fontWeight: '600' } },
+            p.profil?.nama, p.profil?.no_absen ? ` · absen ${p.profil.no_absen}` : ''),
+          el('div', { class: 'mono', gaya: { fontSize: '11.5px', color: 'var(--tinta-lembut)' } },
+            `${p.tugas.kode} — ${p.tugas.judul}`)),
+        el('div', { gaya: { textAlign: 'right' } },
+          el('span', { class: 'lencana-nilai nilai-' + p.nilai_huruf, gaya: { fontSize: '15px', padding: '4px 10px' } },
+            `${p.nilai_huruf} · ${LABEL[p.nilai_huruf] ?? ''}`),
+          el('div', { gaya: { fontSize: '11px', color: 'var(--tinta-lembut)', marginTop: '3px' } },
+            p.terkunci ? '🔒 terkunci' : 'terbuka')),
+      ),
+
+      p.catatan && el('div', { gaya: { marginTop: '11px', padding: '10px 12px',
+                                        background: 'var(--kertas)', borderRadius: '7px', fontSize: '13.5px' } },
+        el('div', { gaya: { fontSize: '10.5px', textTransform: 'uppercase', letterSpacing: '.06em',
+                             color: 'var(--tinta-lembut)', marginBottom: '3px' } }, 'Catatan murid'),
+        p.catatan),
+
+      // Hasil pekerjaan murid (dimuat oleh muatKoreksi).
+      el('div', { class: 'wadah-koreksi', data: { pid: String(p.id), tugas: String(p.tugas_id ?? '') } }),
+
+      el('div', { gaya: { marginTop: '11px' } }, umpan),
+      el('div', { gaya: { marginTop: '10px', display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' } },
+        el('span', { gaya: { fontSize: '12px', color: 'var(--tinta-lembut)' } }, 'Ubah nilai:'),
+        el('div', { class: 'nilai-pilih' },
+          ...['A','B','C','D','E'].map(h =>
+            el('button', { class: 'tbl tbl-kecil nilai-tbl nilai-' + h,
+              title: LABEL[h], onClick: () => beriNilaiUlang(h) }, h))),
+        p.terkunci && el('button', { class: 'tbl tbl-kecil', gaya: { marginLeft: 'auto' },
+          onClick: bukaKunci }, '🔓 Buka kunci'),
+      ),
+    ),
+  )
+}
+
 async function muatKoreksi(p, tpId, penugasanId) {
   const wadah = document.querySelector(`.wadah-koreksi[data-pid="${p.id}"]`)
   if (!wadah) return
+
   try {
     // 1. Unggahan bukti.
     const { data: lampiran } = await sb.from('lampiran')

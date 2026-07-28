@@ -7,7 +7,7 @@ import { pesanGalat } from '../lib/kesalahan.js'
 import { pangkatUntuk, ambangBerikutnya, persenKeBerikutnya, formatWaktu } from '../lib/pangkat.js'
 import { muatPapan, ubahStatus, catatWaktu, papanPeringkat, statistikSaya, badgeSaya }
   from '../rutin/papan.js'
-import { muatLembar, simpanIsian } from '../rutin/lembar-kerja.js'
+import { muatLembar, simpanIsian, buatPenyimpan } from '../rutin/lembar-kerja.js'
 import * as LK from '../lib/lembar.js'
 import { keadaan, pergiKe, keluar } from '../main.js'
 import { dialogTiket, timerAktif, hentikanTimer } from './tiket.js'
@@ -514,25 +514,38 @@ function tabelLembar(l, terkunci = false) {
                   'Sampaikan ke gurumu agar melengkapinya di panel LKPD.'))
   }
 
-  const simpan = tunda(async () => {
+  function laporSimpan(status, info) {
     const tanda = $('#tanda-simpan')
-    try {
-      await simpanIsian(keadaan.penugasan.id, keadaan.profil.id, l.id, data)
-      if (tanda) { tanda.textContent = 'Tersimpan'; tanda.classList.add('aktif')
-                   setTimeout(() => tanda.classList.remove('aktif'), 1400) }
-    } catch (err) {
-      roti(pesanGalat(err), '⚠')
+    if (!tanda) return
+    tanda.classList.remove('aktif', 'gagal', 'nunggu')
+    switch (status) {
+      case 'menyimpan': tanda.textContent = 'Menyimpan…'; break
+      case 'tersimpan': tanda.textContent = '✓ Tersimpan'; tanda.classList.add('aktif')
+        setTimeout(() => { if (tanda && tanda.textContent === '✓ Tersimpan') tanda.classList.remove('aktif') }, 1400); break
+      case 'menunggu-koneksi': tanda.textContent = '⚠ Menunggu koneksi…'; tanda.classList.add('nunggu'); break
+      case 'akan-coba-lagi': tanda.textContent = `⚠ Gagal — mencoba lagi (${info?.percobaan})…`; tanda.classList.add('nunggu'); break
+      case 'gagal': tanda.textContent = '✗ Belum tersimpan'; tanda.classList.add('gagal'); break
     }
-  }, 700)
+  }
 
-  // Simpan sebelum menutup tab
-  window.addEventListener('beforeunload', () => simpan.segera(), { once: true })
+  const penyimpan = buatPenyimpan(
+    (d) => simpanIsian(keadaan.penugasan.id, keadaan.profil.id, l.id, d),
+    laporSimpan,
+  )
+
+  // Simpan sebelum menutup tab: peringatkan bila masih ada yang tertunda.
+  const jagaKeluar = (e) => {
+    if (penyimpan.adaTertunda()) {
+      penyimpan.flush()
+      e.preventDefault(); e.returnValue = ''
+      return ''
+    }
+  }
+  window.addEventListener('beforeunload', jagaKeluar)
 
   function ubah(baris, kunci, nilai) {
     data[String(baris)] = { ...(data[String(baris)] ?? {}), [kunci]: nilai }
-    const tanda = $('#tanda-simpan')
-    if (tanda) tanda.textContent = 'Menyimpan…'
-    simpan()
+    penyimpan.jadwalkan({ ...data }, 700)
   }
 
   function sel(baris, k) {
