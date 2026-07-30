@@ -19,6 +19,7 @@
 export const BOBOT_BAWAAN = {
   dasarInti: 1.0, poinPerTantangan: 4, poinPerBadge: 2, maksimum: 100,
   review: 65, badge: 20, kecepatan: 15,
+  tantangan: 10,
   poin_per_badge: 10,
   penalti_telat_per_jam: 2,
   penalti_telat_maks: 40,
@@ -57,13 +58,26 @@ export function hitungNilaiSprint(komp, bobot = {}) {
   const wR = (b.review ?? 0) / totalBobot
   const wB = (b.badge ?? 0) / totalBobot
   const wK = (b.kecepatan ?? 0) / totalBobot
-  const nilai = Math.round(Math.min(100, review * wR + badge * wB + kecepatan * wK))
+  const dasar = Math.min(100, review * wR + badge * wB + kecepatan * wK)
+
+  // Porsi tantangan (Cara B): tantangan bertindak sebagai "pengunci" batas atas.
+  // Tanpa tantangan, nilai dibatasi (100 - porsi)%. Porsi dibuka sebanding
+  // dengan proporsi tugas tantangan yang sudah DINILAI. Bila sprint tidak punya
+  // tugas tantangan, batas atas kembali 100% (tidak menghukum).
+  const porsi = Math.max(0, Math.min(100, b.tantangan ?? 0)) / 100
+  const tTotal = komp.tantanganTotal ?? 0
+  const tDinilai = Math.min(komp.tantanganDinilai ?? 0, tTotal)
+  const rasioTantangan = tTotal > 0 ? (tDinilai / tTotal) : 1   // tak ada tantangan = penuh
+  const batas = (1 - porsi) + porsi * rasioTantangan            // 0..1
+  const nilai = Math.round(Math.min(100, dasar) * batas)
+
   return {
     nilai,
     predikat: predikatUntuk(nilai),
     rincian: {
       review: Math.round(review), badge: Math.round(badge),
       kecepatan: Math.round(kecepatan),
+      tantangan: { dinilai: tDinilai, total: tTotal, persenBatas: Math.round(batas * 100) },
       bobot: { review: Math.round(wR * 100), badge: Math.round(wB * 100), kecepatan: Math.round(wK * 100) },
     },
   }
