@@ -48,6 +48,8 @@ export async function hentikanTimer() {
   } catch (err) {
     roti(pesanGalat(err), '⚠')
   }
+  // Beri tahu halaman lain (mis. Lembar) agar kunci tabel menyesuaikan.
+  try { window.dispatchEvent(new Event('brantas-timer')) } catch (_) { /* abaikan */ }
   return detik
 }
 
@@ -66,6 +68,8 @@ function mulaiTimer(tugas, dasarDetik, saatDetak) {
                    onClick: () => hentikanTimer().then(() => saatDetak?.(true)) }, '■'),
   )
   document.body.append(timer.mini)
+  // Beri tahu halaman lain (mis. Lembar) agar kunci tabel menyesuaikan.
+  try { window.dispatchEvent(new Event('brantas-timer')) } catch (_) { /* abaikan */ }
 
   timer.iv = setInterval(() => {
     const d = detikSekarang()
