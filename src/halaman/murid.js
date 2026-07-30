@@ -5,8 +5,8 @@ import { sb } from '../lib/supabase.js'
 import { el, isi, $, $$, roti, inisial, tunda, tanggalId, rangkaMuat } from '../lib/dom.js'
 import { pesanGalat } from '../lib/kesalahan.js'
 import { pangkatUntuk, ambangBerikutnya, persenKeBerikutnya, formatWaktu } from '../lib/pangkat.js'
-import { hitungNilai, predikatUntuk } from '../lib/nilai.js'
-import { muatPapan, ubahStatus, catatWaktu, papanPeringkat, statistikSaya, badgeSaya }
+import { hitungNilai, hitungNilaiSprint, predikatUntuk } from '../lib/nilai.js'
+import { muatPapan, ubahStatus, catatWaktu, papanPeringkat, statistikSaya, badgeSaya, rekapNilaiPerSprint }
   from '../rutin/papan.js'
 import { muatLembar, simpanIsian, buatPenyimpan } from '../rutin/lembar-kerja.js'
 import * as LK from '../lib/lembar.js'
@@ -687,7 +687,7 @@ function tabelLembar(l, terkunci = false) {
    ========================================================== */
 async function tampilKemajuan(wadah) {
   const a = keadaan.penugasan
-  let stat, badges, peringkat, semuaBadge, bobot = {}, intiTotal = 0
+  let stat, badges, peringkat, semuaBadge, bobot = {}, rekapSprint = null
 
   try {
     ;[stat, badges, peringkat] = await Promise.all([
@@ -702,12 +702,9 @@ async function tampilKemajuan(wadah) {
     const { data: setelan } = await sb.from('pengaturan')
       .select('nilai').eq('kunci', 'bobot_nilai').maybeSingle()
     bobot = setelan?.nilai ?? {}
-    // Jumlah tugas inti pada LKPD ini (pembagi nilai).
-    const { count } = await sb.from('tugas')
-      .select('id, sprint!inner(tujuan_pembelajaran_id)', { count: 'exact', head: true })
-      .eq('jenis', 'inti')
-      .eq('sprint.tujuan_pembelajaran_id', a.tujuan_pembelajaran.id)
-    intiTotal = count ?? 0
+    // Rekap per sprint (memuat porsi tantangan) untuk nilai total yang konsisten
+    // dengan yang dilihat guru.
+    rekapSprint = await rekapNilaiPerSprint(a.id, a.tujuan_pembelajaran.id)
   } catch (err) {
     isi(wadah, el('div', { class: 'pesan pesan-galat' }, pesanGalat(err)))
     return
@@ -716,16 +713,30 @@ async function tampilKemajuan(wadah) {
   const xp = stat?.total_xp ?? 0
   const dapat = new Set(badges.map(b => b.badge.id))
 
-  // Hitung nilai total (gabungan) memakai statistik murid + pengaturan.
+  // Nilai total = rata-rata nilai tiap sprint (tiap sprint sudah menerapkan
+  // porsi tantangan). Konsisten dengan halaman nilai guru (mode per sprint).
   const KKM = bobot.kkm ?? 75
   const AMBANG_HIJAU = bobot.ambang_hijau ?? 85
-  const hasilNilai = hitungNilai({
-    inti_selesai: stat?.tugas_selesai ?? 0,
-    inti_total: intiTotal,
-    tantangan_selesai: stat?.tantangan_selesai ?? 0,
-    jumlah_badge: stat?.jumlah_badge ?? 0,
-  }, bobot)
-  const nilaiTotal = hasilNilai.nilai
+  const sayaSprint = rekapSprint.murid.find(m => m.murid_id === keadaan.profil.id)
+  let nilaiTotal = 0
+  if (rekapSprint.sprints.length) {
+    let jml = 0
+    for (const s of rekapSprint.sprints) {
+      const ps = sayaSprint?.perSprint?.[s.id] ?? { huruf: [], badge: 0 }
+      const hasil = hitungNilaiSprint({
+        hurufList: ps.huruf ?? [],
+        intiTotal: s.intiTotal,
+        jumlahBadge: ps.badge ?? 0,
+        tantanganTotal: s.tantanganTotal ?? 0,
+        tantanganDinilai: ps.tantanganDinilai ?? 0,
+        kecepatan: ps.peringkat != null
+          ? { peringkat: ps.peringkat, jumlahKumpul: ps.jumlahKumpul, jamTelat: ps.jamTelat }
+          : null,
+      }, bobot)
+      jml += hasil.nilai
+    }
+    nilaiTotal = Math.round(jml / rekapSprint.sprints.length)
+  }
   // Warna dinamis: merah < KKM, kuning-kehijauan lulus, hijau ≥ ambang.
   const warnaNilai = nilaiTotal < KKM ? 'merah'
     : nilaiTotal >= AMBANG_HIJAU ? 'hijau' : 'kuning'
