@@ -39,16 +39,30 @@ export async function halamanNilai(wadah, penugasanId) {
   let mode = 'total'   // 'total' | 'sprint'
 
   // Susun baris nilai, urut nomor absen lalu nama.
+  // Total = rata-rata nilai tiap sprint (tiap sprint sudah menerapkan porsi
+  // tantangan), agar konsisten dengan mode per sprint & kartu murid.
   function hitungSemua() {
     return rekap.murid
       .map(m => {
-        const hasil = hitungNilai({
-          inti_selesai: m.tugas_selesai,
-          inti_total: rekap.intiTotal,
-          tantangan_selesai: m.tantangan_selesai,
-          jumlah_badge: m.jumlah_badge,
-        }, bobot)
-        return { ...m, ...hasil }
+        const mSprint = rekapSprint.murid.find(x => x.murid_id === m.murid_id)
+        let jml = 0, n = 0
+        for (const s of rekapSprint.sprints) {
+          const ps = mSprint?.perSprint?.[s.id] ?? { huruf: [], badge: 0 }
+          const h = hitungNilaiSprint({
+            hurufList: ps.huruf ?? [],
+            intiTotal: s.intiTotal,
+            jumlahBadge: ps.badge ?? 0,
+            tantanganTotal: s.tantanganTotal ?? 0,
+            tantanganDinilai: ps.tantanganDinilai ?? 0,
+            kecepatan: ps.peringkat != null
+              ? { peringkat: ps.peringkat, jumlahKumpul: ps.jumlahKumpul, jamTelat: ps.jamTelat }
+              : null,
+          }, bobot)
+          jml += h.nilai; n++
+        }
+        const nilai = n ? Math.round(jml / n) : 0
+        return { ...m, nilai, predikat: predikatUntuk(nilai),
+                 tuntas: rekap.intiTotal > 0 && m.tugas_selesai === rekap.intiTotal }
       })
       .sort((a, b) =>
         (a.profil?.no_absen ?? '').localeCompare(b.profil?.no_absen ?? '', undefined, { numeric: true })
@@ -145,6 +159,8 @@ export async function halamanNilai(wadah, penugasanId) {
             hurufList: ps.huruf ?? [],
             intiTotal: s.intiTotal,
             jumlahBadge: ps.badge ?? 0,
+            tantanganTotal: s.tantanganTotal ?? 0,
+            tantanganDinilai: ps.tantanganDinilai ?? 0,
             kecepatan: ps.peringkat != null
               ? { peringkat: ps.peringkat, jumlahKumpul: ps.jumlahKumpul, jamTelat: ps.jamTelat }
               : null,
@@ -188,8 +204,13 @@ export async function halamanNilai(wadah, penugasanId) {
                     ...sprints.map(s => {
                       const v = r.nilaiSprint[s.id]
                       const rc = v.rincian ?? {}
+                      const t = rc.tantangan
+                      const infoTantangan = t && t.total > 0
+                        ? ` · tantangan ${t.dinilai}/${t.total} (batas ${t.persenBatas}%)`
+                        : ''
                       const info = `${v.dinilai}/${v.total} inti dinilai · ` +
-                        `review ${rc.review ?? 0}, badge ${rc.badge ?? 0}, kecepatan ${rc.kecepatan ?? 0}`
+                        `review ${rc.review ?? 0}, badge ${rc.badge ?? 0}, kecepatan ${rc.kecepatan ?? 0}` +
+                        infoTantangan
                       return el('td', { class: 'angka',
                         gaya: { color: warnaNilai(v.nilai) } },
                         el('span', { title: info }, String(v.nilai)))
