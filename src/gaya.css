@@ -671,3 +671,12 @@ textarea:disabled,input:disabled{opacity:.55;cursor:not-allowed;background:var(-
 /* Status penyimpanan isian yang lebih jelas (andal saat internet lambat) */
 .simpan-tanda.nunggu{color:#8a6a2f;font-weight:600}
 .simpan-tanda.gagal{color:#a12f2f;font-weight:600}
+
+/* Halaman "Sudah Dinilai" — ciutkan per murid */
+.grup-murid-tbl{width:100%;border:none;background:var(--hijau-lembut);cursor:pointer;
+  font:inherit;text-align:left}
+.grup-murid-tbl:hover{filter:brightness(.98)}
+.arsip-panah{font-size:12px;color:var(--tinta-lembut);width:14px;flex:0 0 auto}
+.grup-murid-isi{padding:12px;display:flex;flex-direction:column;gap:16px}
+.arsip-sprint-judul{font-size:12px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.05em;color:var(--hijau);margin-bottom:8px}
