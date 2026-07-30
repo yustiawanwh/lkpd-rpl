@@ -11,7 +11,7 @@ import { el, isi, $, $$, roti, dialog, rangkaMuat } from '../lib/dom.js'
 import { pesanGalat } from '../lib/kesalahan.js'
 import { formatWaktu } from '../lib/pangkat.js'
 import { rekapNilai, rekapNilaiPerSprint } from '../rutin/papan.js'
-import { hitungNilai, hitungNilaiSprint, predikatUntuk, warnaPredikat, BOBOT_BAWAAN } from '../lib/nilai.js'
+import { hitungNilaiSprint, predikatUntuk, warnaPredikat, BOBOT_BAWAAN } from '../lib/nilai.js'
 import { keadaan, pergiKe } from '../main.js'
 
 export async function halamanNilai(wadah, penugasanId) {
@@ -61,8 +61,13 @@ export async function halamanNilai(wadah, penugasanId) {
           jml += h.nilai; n++
         }
         const nilai = n ? Math.round(jml / n) : 0
+        // Ringkasan untuk kolom tabel & ekspor (agar tampilan tetap lengkap).
+        const intiSelesai = m.tugas_selesai ?? 0
+        const tantanganSelesai = m.tantangan_selesai ?? 0
         return { ...m, nilai, predikat: predikatUntuk(nilai),
-                 tuntas: rekap.intiTotal > 0 && m.tugas_selesai === rekap.intiTotal }
+                 tuntas: rekap.intiTotal > 0 && intiSelesai === rekap.intiTotal,
+                 rincian: { intiSelesai, intiTotal: rekap.intiTotal,
+                            tantangan: tantanganSelesai, badge: m.jumlah_badge ?? 0 } }
       })
       .sort((a, b) =>
         (a.profil?.no_absen ?? '').localeCompare(b.profil?.no_absen ?? '', undefined, { numeric: true })
@@ -86,7 +91,8 @@ export async function halamanNilai(wadah, penugasanId) {
               onClick: () => { mode = 'total'; gambar() } }, 'Total'),
             el('button', { class: 'tbl tbl-kecil' + (mode === 'sprint' ? ' tbl-utama' : ''),
               onClick: () => { mode = 'sprint'; gambar() } }, 'Per sprint')),
-          mode === 'total' && el('button', { class: 'tbl', onClick: () => dialogBobot() }, 'Atur bobot'),
+          mode === 'total' && el('span', { gaya: { fontSize: '12px', color: 'var(--tinta-lembut)' } },
+            'Atur bobot & porsi di menu Pengaturan'),
           el('button', { class: 'tbl', onClick: () => window.print() }, 'Cetak'),
           el('button', { class: 'tbl tbl-utama',
             onClick: () => mode === 'total' ? unduhCsv(baris) : unduhCsvSprint() }, 'Unduh Excel (CSV)'),
@@ -111,9 +117,9 @@ export async function halamanNilai(wadah, penugasanId) {
         kartuAngka('Tugas inti', String(rekap.intiTotal)),
       ),
       el('div', { class: 'pesan pesan-info', gaya: { marginBottom: '14px' } },
-        `Nilai dasar dari ketuntasan ${rekap.intiTotal} tugas inti (tuntas semua = 100). ` +
-        `Tantangan +${bobot.poinPerTantangan}/tugas dan badge +${bobot.poinPerBadge}/badge menambah di atasnya, ` +
-        `dibatasi maksimal 100. "Tuntas" berarti seluruh tugas inti selesai.`),
+        `Nilai total adalah rata-rata nilai seluruh sprint. Tiap sprint menggabungkan review, badge, ` +
+        `dan kecepatan, lalu dibatasi porsi tantangan (${bobot.tantangan ?? 10}%): nilai penuh hanya ` +
+        `untuk yang menyelesaikan semua tugas termasuk tantangan. Tuntas berarti seluruh tugas inti selesai.`),
       baris.length
         ? el('div', { class: 'panel' },
             el('div', { class: 'tabel-bungkus' },
@@ -122,7 +128,6 @@ export async function halamanNilai(wadah, penugasanId) {
                   el('th', { class: 'tengah' }, 'Absen'), el('th', {}, 'Nama'),
                   el('th', { class: 'tengah' }, 'Inti'), el('th', { class: 'angka' }, 'Tantangan'),
                   el('th', { class: 'angka' }, 'Badge'),
-                  el('th', { class: 'angka' }, 'Dasar'), el('th', { class: 'angka' }, 'Bonus'),
                   el('th', { class: 'angka' }, 'Nilai'), el('th', {}, 'Predikat'),
                   el('th', { class: 'tengah' }, 'Tuntas'))),
                 el('tbody', {}, ...baris.map(r => el('tr', {},
@@ -131,8 +136,6 @@ export async function halamanNilai(wadah, penugasanId) {
                   el('td', { class: 'mono tengah' }, `${r.rincian.intiSelesai}/${r.rincian.intiTotal}`),
                   el('td', { class: 'angka' }, String(r.rincian.tantangan)),
                   el('td', { class: 'angka' }, String(r.rincian.badge)),
-                  el('td', { class: 'angka lembut' }, String(r.dasar)),
-                  el('td', { class: 'angka lembut' }, r.bonus > 0 ? `+${r.bonus}` : '0'),
                   el('td', { class: 'angka', gaya: { fontWeight: '700', fontSize: '15px' } },
                     String(r.nilai)),
                   el('td', {}, lencanaPredikat(r.nilai)),
@@ -226,41 +229,14 @@ export async function halamanNilai(wadah, penugasanId) {
     )
   }
 
-  function dialogBobot() {
-    const fTantangan = el('input', { type: 'number', min: '0', max: '20', value: bobot.poinPerTantangan })
-    const fBadge = el('input', { type: 'number', min: '0', max: '20', value: bobot.poinPerBadge })
-    let tutup
-    tutup = dialog({
-      judul: 'Atur bobot bonus',
-      badan: el('div', {},
-        el('p', { gaya: { margin: '0 0 12px', fontSize: '13.5px', color: 'var(--tinta-lembut)', lineHeight: '1.55' } },
-          'Nilai dasar selalu dari ketuntasan tugas inti (tuntas semua = 100). ' +
-          'Di sini kamu mengatur seberapa besar tambahan dari tantangan dan badge.'),
-        el('div', { class: 'kisi-2' },
-          el('div', { class: 'ruas' }, el('label', {}, 'Poin / tantangan'), fTantangan),
-          el('div', { class: 'ruas' }, el('label', {}, 'Poin / badge'), fBadge)),
-        el('p', { gaya: { margin: 0, fontSize: '12.5px', color: 'var(--tinta-lembut)' } },
-          'Nilai akhir tetap dibatasi maksimal 100.'),
-      ),
-      kaki: [el('div', { gaya: { marginLeft: 'auto', display: 'flex', gap: '8px' } },
-        el('button', { class: 'tbl', onClick: () => tutup() }, 'Batal'),
-        el('button', { class: 'tbl tbl-utama', onClick: () => {
-          bobot = { ...bobot,
-            poinPerTantangan: Number(fTantangan.value) || 0,
-            poinPerBadge: Number(fBadge.value) || 0 }
-          tutup(); gambar()
-        } }, 'Terapkan'))],
-      lebar: '440px',
-    })
-  }
 
   function unduhCsv(baris) {
     const kepala = ['No Absen', 'Nama', 'Inti Selesai', 'Inti Total', 'Tantangan',
-                    'Badge', 'Nilai Dasar', 'Bonus', 'Nilai Akhir', 'Predikat', 'Tuntas KKTP']
+                    'Badge', 'Nilai Akhir', 'Predikat', 'Tuntas KKTP']
     const larik = baris.map(r => [
       r.profil?.no_absen ?? '', r.profil?.nama ?? '',
       r.rincian.intiSelesai, r.rincian.intiTotal, r.rincian.tantangan,
-      r.rincian.badge, r.dasar, r.bonus, r.nilai, r.predikat,
+      r.rincian.badge, r.nilai, r.predikat,
       r.tuntas ? 'Tuntas' : 'Belum',
     ])
 
