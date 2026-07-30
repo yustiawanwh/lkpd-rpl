@@ -438,17 +438,27 @@ async function periksaBadgeBaru() {
    ========================================================== */
 async function tampilLembar(wadah) {
   const a = keadaan.penugasan
-  let daftar, kodeTerkunci
+  let daftar, kodeTerkunci, petaKodeTugas
 
   try {
     daftar = await muatLembar(a.tujuan_pembelajaran.id, a.id)
     // Cari lembar mana yang tabelnya terkunci: yaitu yang menjadi
     // lembar_kode dari tugas milik murid ini yang berstatus terkunci.
     const { data: prog } = await sb.from('progres_tugas')
-      .select('terkunci, tugas:tugas_id(lembar_kode)')
-      .eq('penugasan_id', a.id).eq('murid_id', keadaan.profil.id).eq('terkunci', true)
+      .select('terkunci, tugas:tugas_id(id, lembar_kode)')
+      .eq('penugasan_id', a.id).eq('murid_id', keadaan.profil.id)
     kodeTerkunci = new Set((prog ?? [])
+      .filter(p => p.terkunci)
       .map(p => p.tugas?.lembar_kode).filter(Boolean).map(k => k.toUpperCase()))
+    // Peta: kode lembar → daftar id tugas yang memakainya (untuk cek timer).
+    petaKodeTugas = new Map()
+    for (const p of (prog ?? [])) {
+      const kode = p.tugas?.lembar_kode
+      if (!kode || !p.tugas?.id) continue
+      const K = kode.toUpperCase()
+      if (!petaKodeTugas.has(K)) petaKodeTugas.set(K, [])
+      petaKodeTugas.get(K).push(p.tugas.id)
+    }
   } catch (err) {
     isi(wadah, el('div', { class: 'pesan pesan-galat' }, pesanGalat(err)))
     return
@@ -466,6 +476,12 @@ async function tampilLembar(wadah) {
   function gambar() {
     const l = daftar.find(x => x.kode === aktif) ?? daftar[0]
     const terkunci = kodeTerkunci.has((l.kode ?? '').toUpperCase())
+
+    // Kunci mengikuti timer: tabel hanya bisa diisi bila salah satu tugas yang
+    // memakai lembar ini timernya sedang BERJALAN. Konsisten dengan tiket.
+    const idTugasLembar = petaKodeTugas.get((l.kode ?? '').toUpperCase()) ?? []
+    const timerJalan = idTugasLembar.includes(timerAktif())
+    const terkunciTimer = !terkunci && !timerJalan
 
     isi(wadah,
       el('div', { class: 'kepala' },
@@ -491,13 +507,27 @@ async function tampilLembar(wadah) {
         'Tabel ini terkunci karena tugasnya sudah kamu tandai selesai. ' +
         'Isiannya tidak bisa diubah lagi. Minta gurumu membuka kunci bila perlu diperbaiki.'),
 
+      // Petunjuk bila terkunci karena timer belum berjalan.
+      terkunciTimer && el('div', { class: 'pesan pesan-info', gaya: { marginBottom: '12px' } },
+        '⏱ Tabel ini aktif saat kamu menjalankan timer tugasnya. Buka tugas yang ' +
+        'memakai tabel ini lalu tekan “Mulai”, baru tabel bisa diisi. ' +
+        'Ini mencegah pengisian tanpa mengerjakan.'),
+
       el('div', { class: 'panel' },
-        el('div', { class: 'panel-isi' }, tabelLembar(l, terkunci)),
+        el('div', { class: 'panel-isi' }, tabelLembar(l, terkunci || terkunciTimer)),
       ),
     )
   }
 
   gambar()
+
+  // Bila status timer berubah (dari mana pun), segarkan agar kunci menyesuaikan.
+  // Berhenti mendengarkan begitu halaman ini tak lagi tampil.
+  const saatTimer = () => {
+    if (document.body.contains(wadah)) gambar()
+    else window.removeEventListener('brantas-timer', saatTimer)
+  }
+  window.addEventListener('brantas-timer', saatTimer)
 }
 
 function tabelLembar(l, terkunci = false) {
