@@ -680,3 +680,25 @@ textarea:disabled,input:disabled{opacity:.55;cursor:not-allowed;background:var(-
 .grup-murid-isi{padding:12px;display:flex;flex-direction:column;gap:16px}
 .arsip-sprint-judul{font-size:12px;font-weight:700;text-transform:uppercase;
   letter-spacing:.05em;color:var(--hijau);margin-bottom:8px}
+
+/* Kartu nilai total di halaman Kemajuan murid — warna latar dinamis */
+.nilai-kotak{border-radius:14px;padding:18px 20px;color:#fff;position:relative;overflow:hidden}
+.nilai-kotak-label{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  opacity:.85}
+.nilai-kotak-angka{font-size:42px;font-weight:800;line-height:1.05;margin:2px 0}
+.nilai-kotak-angka small{font-size:16px;font-weight:600;opacity:.8}
+.nilai-kotak-predikat{font-size:15px;font-weight:700;margin-top:2px}
+.nilai-kotak-ket{font-size:12px;opacity:.85;margin-top:6px}
+/* Merah = di bawah KKM */
+.nilai-latar-merah{background:linear-gradient(135deg,#b3261e,#7f1d1d)}
+/* Kuning-kehijauan = lulus */
+.nilai-latar-kuning{background:linear-gradient(135deg,#6a8f2f,#4d7c1f)}
+/* Hijau = sangat baik */
+.nilai-latar-hijau{background:linear-gradient(135deg,#1f8f5f,#116b45)}
+
+/* Titik penanda warna di panel pengaturan */
+.titik-warna{display:inline-block;width:11px;height:11px;border-radius:50%;vertical-align:middle;
+  margin-right:2px}
+.titik-warna.merah{background:#b3261e}
+.titik-warna.kuning{background:#6a8f2f}
+.titik-warna.hijau{background:#1f8f5f}
