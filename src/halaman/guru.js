@@ -806,34 +806,107 @@ async function arsipDinilai(wadah, penugasanId) {
 
   const { data, error } = await sb
     .from('progres_tugas')
-    .select('id, status, detik_terpakai, catatan, diserahkan_pada, disetujui_pada, murid_id, tugas_id, nilai_huruf, umpan_balik, terkunci, profil:murid_id(nama, no_absen), tugas(kode, judul, xp, estimasi_menit, bukti_diminta, lembar_kode)')
+    .select('id, status, detik_terpakai, catatan, diserahkan_pada, disetujui_pada, murid_id, tugas_id, nilai_huruf, umpan_balik, terkunci, profil:murid_id(nama, no_absen), tugas(kode, judul, xp, estimasi_menit, bukti_diminta, lembar_kode, urutan, sprint(nomor, nama))')
     .eq('penugasan_id', penugasanId)
     .not('nilai_huruf', 'is', null)
     .order('disetujui_pada', { ascending: false })
   if (error) throw error
 
-  // Kelompokkan per murid untuk memudahkan penelusuran.
+  // Kelompokkan per murid (antar murid diurut nomor absen agar tetap).
+  const petaMurid = new Map()
+  for (const p of data) {
+    if (!petaMurid.has(p.murid_id)) {
+      petaMurid.set(p.murid_id, { murid_id: p.murid_id, profil: p.profil, tugas: [] })
+    }
+    petaMurid.get(p.murid_id).tugas.push(p)
+  }
+  const nomorAbsen = (k) => {
+    const a = k.profil?.no_absen
+    if (a == null || a === '') return Infinity
+    const n = parseInt(a, 10)
+    return Number.isNaN(n) ? Infinity : n
+  }
+  const kelompok = [...petaMurid.values()].sort((a, b) =>
+    nomorAbsen(a) - nomorAbsen(b)
+    || (a.profil?.no_absen ?? '').localeCompare(b.profil?.no_absen ?? '')
+    || (a.profil?.nama ?? '').localeCompare(b.profil?.nama ?? ''))
+
   isi(wadah,
     el('div', { class: 'kepala' },
       el('div', {},
         el('button', { class: 'tbl tbl-kecil tbl-hantu', gaya: { padding: '2px 0', marginBottom: '4px' },
                        onClick: () => pergiKe(`kelas/${pen.kelas_id}`) }, '← Kembali ke kelas'),
         el('h1', {}, 'Sudah Dinilai'),
-        el('p', {}, `${pen.kelas?.nama} · ${pen.tujuan_pembelajaran?.kode} — ${data.length} tugas telah dinilai`),
+        el('p', {}, `${pen.kelas?.nama} · ${pen.tujuan_pembelajaran?.kode}` +
+                    (data.length ? ` — ${data.length} tugas dinilai dari ${kelompok.length} murid` : '')),
       ),
     ),
 
     data.length
-      ? el('div', { class: 'tumpuk' }, ...data.map(p => kartuArsip(p, penugasanId, wadah)))
+      ? el('div', { class: 'tumpuk-murid' }, ...kelompok.map(k =>
+          kartuMuridArsip(k, penugasanId, pen?.tujuan_pembelajaran?.id, wadah)))
       : el('div', { class: 'panel' }, el('div', { class: 'kosong' },
           el('h3', {}, 'Belum ada yang dinilai'),
           el('p', {}, 'Tugas yang sudah kamu beri nilai A–E akan muncul di sini, ' +
                       'lengkap dengan hasil pekerjaan murid.'))),
   )
+}
 
-  for (const p of data) {
-    muatKoreksi(p, pen?.tujuan_pembelajaran?.id, penugasanId)
+// Satu murid pada halaman "Sudah Dinilai": nama bisa diklik untuk membuka/menutup
+// daftar tugasnya (default tertutup agar ringkas). Di dalamnya, tugas
+// dikelompokkan per sprint (1 → terbesar), tiap sprint diurut id terkecil→terbesar.
+function kartuMuridArsip(k, penugasanId, tpId, wadah) {
+  let terbuka = false
+  const isiTugas = el('div', { class: 'grup-murid-isi', gaya: { display: 'none' } })
+  let sudahMuat = false
+
+  // Kelompokkan tugas murid ini per sprint.
+  const petaSprint = new Map()
+  for (const p of k.tugas) {
+    const no = p.tugas?.sprint?.nomor ?? 0
+    if (!petaSprint.has(no)) {
+      petaSprint.set(no, { nomor: no, nama: p.tugas?.sprint?.nama ?? `Sprint ${no}`, tugas: [] })
+    }
+    petaSprint.get(no).tugas.push(p)
   }
+  const sprints = [...petaSprint.values()].sort((a, b) => a.nomor - b.nomor)
+  for (const s of sprints) {
+    // Di tiap sprint, urut tugas dari id terkecil ke terbesar.
+    s.tugas.sort((a, b) => (a.id ?? 0) - (b.id ?? 0))
+  }
+
+  function bangunIsi() {
+    isi(isiTugas, ...sprints.map(s =>
+      el('div', { class: 'arsip-sprint' },
+        el('div', { class: 'arsip-sprint-judul' }, `Sprint ${s.nomor}${s.nama ? ' — ' + s.nama : ''}`),
+        el('div', { class: 'tumpuk' }, ...s.tugas.map(p => kartuArsip(p, penugasanId, wadah))),
+      )))
+    // Muat hasil pekerjaan (tabel + bukti) hanya saat dibuka → ringkas & cepat.
+    for (const p of k.tugas) muatKoreksi(p, tpId, penugasanId)
+    sudahMuat = true
+  }
+
+  const panah = el('span', { class: 'arsip-panah' }, '▸')
+  const kepala = el('button', { class: 'grup-murid-kepala grup-murid-tbl',
+    'aria-expanded': 'false',
+    onClick: () => {
+      terbuka = !terbuka
+      panah.textContent = terbuka ? '▾' : '▸'
+      kepala.setAttribute('aria-expanded', String(terbuka))
+      isiTugas.style.display = terbuka ? '' : 'none'
+      if (terbuka && !sudahMuat) bangunIsi()
+    } },
+    panah,
+    el('span', { class: 'avatar', gaya: { width: '30px', height: '30px', fontSize: '11px' } },
+      inisial(k.profil?.nama)),
+    el('div', { gaya: { flex: '1', textAlign: 'left' } },
+      el('div', { gaya: { fontWeight: '600', fontSize: '14px' } }, k.profil?.nama ?? '—'),
+      el('div', { gaya: { fontSize: '11.5px', color: 'var(--tinta-lembut)' } },
+        (k.profil?.no_absen ? `Absen ${k.profil.no_absen} · ` : '') +
+        `${k.tugas.length} tugas dinilai`)),
+  )
+
+  return el('div', { class: 'grup-murid' }, kepala, isiTugas)
 }
 
 function kartuArsip(p, penugasanId, wadah) {
