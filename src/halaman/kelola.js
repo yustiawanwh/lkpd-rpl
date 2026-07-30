@@ -106,6 +106,9 @@ const NILAI_BAWAAN = {
   review: 65, badge: 20, kecepatan: 15,
   huruf: { A: 100, B: 85, C: 75, D: 60, E: 40 },
   poin_per_badge: 10, penalti_telat_per_jam: 2, penalti_telat_maks: 40,
+  // KKM & ambang warna predikat pada kartu murid.
+  kkm: 75,            // di bawah ini = belum lulus (merah)
+  ambang_hijau: 85,   // di atas/sama dengan ini = sangat baik (hijau)
 }
 
 function bobotLengkap(b) {
@@ -151,6 +154,16 @@ function panelNilai(bobot, adminSaja, wadah) {
         el('div', {}, `Penalti keterlambatan: ${b.penalti_telat_per_jam} poin/jam`),
         el('div', {}, `Batas maksimal penalti: ${b.penalti_telat_maks} poin`)),
 
+      el('div', { class: 'bagian-judul', gaya: { marginTop: '16px' } }, 'KKM & warna predikat'),
+      el('div', { gaya: { fontSize: '13px', color: 'var(--tinta)', lineHeight: '1.7' } },
+        el('div', {}, `KKM (batas lulus): ${b.kkm}`),
+        el('div', {},
+          el('span', { class: 'titik-warna merah' }), ` Belum lulus: nilai < ${b.kkm}`),
+        el('div', {},
+          el('span', { class: 'titik-warna kuning' }), ` Lulus: ${b.kkm} – ${b.ambang_hijau - 1}`),
+        el('div', {},
+          el('span', { class: 'titik-warna hijau' }), ` Sangat baik: ≥ ${b.ambang_hijau}`)),
+
       !adminSaja && el('p', { gaya: { marginTop: '12px', fontSize: '12.5px', color: 'var(--tinta-lembut)' } },
         'Hanya admin yang bisa mengubah pengaturan nilai.'),
     ),
@@ -175,6 +188,8 @@ function dialogNilai(b, wadah) {
   const fBadgePoin = el('input', { type: 'number', min: '0', max: '100', value: String(b.poin_per_badge) })
   const fPenaltiJam = el('input', { type: 'number', min: '0', max: '100', value: String(b.penalti_telat_per_jam) })
   const fPenaltiMaks = el('input', { type: 'number', min: '0', max: '100', value: String(b.penalti_telat_maks) })
+  const fKkm = el('input', { type: 'number', min: '0', max: '100', value: String(b.kkm) })
+  const fAmbangHijau = el('input', { type: 'number', min: '0', max: '100', value: String(b.ambang_hijau) })
 
   const totalTanda = el('span', { class: 'mono', gaya: { fontWeight: '700' } })
   function perbaruiTotal() {
@@ -195,6 +210,8 @@ function dialogNilai(b, wadah) {
       poin_per_badge: +fBadgePoin.value || 0,
       penalti_telat_per_jam: +fPenaltiJam.value || 0,
       penalti_telat_maks: +fPenaltiMaks.value || 0,
+      kkm: +fKkm.value || 0,
+      ambang_hijau: +fAmbangHijau.value || 0,
     }
     simpan.disabled = true; isi(galat)
     try {
@@ -232,6 +249,14 @@ function dialogNilai(b, wadah) {
         el('div', { class: 'ruas' }, el('label', {}, 'Poin/badge'), fBadgePoin),
         el('div', { class: 'ruas' }, el('label', {}, 'Penalti/jam telat'), fPenaltiJam),
         el('div', { class: 'ruas' }, el('label', {}, 'Maks penalti'), fPenaltiMaks)),
+
+      el('div', { class: 'bagian-judul', gaya: { marginTop: '14px' } }, 'KKM & warna predikat'),
+      el('div', { class: 'kisi-2' },
+        el('div', { class: 'ruas' }, el('label', {}, 'KKM (batas lulus)'), fKkm),
+        el('div', { class: 'ruas' }, el('label', {}, 'Ambang hijau (sangat baik)'), fAmbangHijau)),
+      el('p', { gaya: { margin: '4px 0 0', fontSize: '12px', color: 'var(--tinta-lembut)', lineHeight: '1.5' } },
+        'Merah bila nilai di bawah KKM, kuning-kehijauan bila lulus (KKM sampai ambang hijau − 1), ' +
+        'dan hijau bila nilai ≥ ambang hijau.'),
     ),
     kaki: [el('div', { gaya: { marginLeft: 'auto', display: 'flex', gap: '8px' } },
       el('button', { class: 'tbl', onClick: () => tutup() }, 'Batal'), simpan)],
