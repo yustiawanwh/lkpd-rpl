@@ -746,14 +746,20 @@ async function antreanReview(wadah, penugasanId) {
       (a.tugas?.sprint?.nomor ?? 0) - (b.tugas?.sprint?.nomor ?? 0)
       || (a.tugas?.urutan ?? 0) - (b.tugas?.urutan ?? 0)
       || (a.tugas?.kode ?? '').localeCompare(b.tugas?.kode ?? ''))
-    // Waktu tunggu tertua murid ini (untuk urutan antar murid).
-    k.tertua = k.tugas.reduce((min, t) => {
-      const d = t.diserahkan_pada ? new Date(t.diserahkan_pada).getTime() : Infinity
-      return Math.min(min, d)
-    }, Infinity)
   }
-  // Murid dengan tugas tertua di paling atas.
-  kelompok.sort((a, b) => a.tertua - b.tertua)
+  // Antar murid: urut berdasarkan NOMOR ABSEN agar urutannya tetap
+  // (tidak berubah-ubah setelah tugas dinilai). Absen numerik diurut
+  // sebagai angka; bila kosong, ditaruh di bawah.
+  const nomorAbsen = (k) => {
+    const a = k.profil?.no_absen
+    if (a == null || a === '') return Infinity
+    const n = parseInt(a, 10)
+    return Number.isNaN(n) ? Infinity : n
+  }
+  kelompok.sort((a, b) =>
+    nomorAbsen(a) - nomorAbsen(b)
+    || (a.profil?.no_absen ?? '').localeCompare(b.profil?.no_absen ?? '')
+    || (a.profil?.nama ?? '').localeCompare(b.profil?.nama ?? ''))
 
   isi(wadah,
     el('div', { class: 'kepala' },
