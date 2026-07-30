@@ -5,6 +5,7 @@ import { sb } from '../lib/supabase.js'
 import { el, isi, $, $$, roti, inisial, tunda, tanggalId, rangkaMuat } from '../lib/dom.js'
 import { pesanGalat } from '../lib/kesalahan.js'
 import { pangkatUntuk, ambangBerikutnya, persenKeBerikutnya, formatWaktu } from '../lib/pangkat.js'
+import { hitungNilai, predikatUntuk } from '../lib/nilai.js'
 import { muatPapan, ubahStatus, catatWaktu, papanPeringkat, statistikSaya, badgeSaya }
   from '../rutin/papan.js'
 import { muatLembar, simpanIsian, buatPenyimpan } from '../rutin/lembar-kerja.js'
@@ -686,7 +687,7 @@ function tabelLembar(l, terkunci = false) {
    ========================================================== */
 async function tampilKemajuan(wadah) {
   const a = keadaan.penugasan
-  let stat, badges, peringkat, semuaBadge
+  let stat, badges, peringkat, semuaBadge, bobot = {}, intiTotal = 0
 
   try {
     ;[stat, badges, peringkat] = await Promise.all([
@@ -697,6 +698,16 @@ async function tampilKemajuan(wadah) {
     const { data } = await sb.from('badge').select('*')
       .eq('tujuan_pembelajaran_id', a.tujuan_pembelajaran.id).order('urutan')
     semuaBadge = data ?? []
+    // Pengaturan nilai (KKM, ambang warna, bobot) — dipakai untuk kartu nilai.
+    const { data: setelan } = await sb.from('pengaturan')
+      .select('nilai').eq('kunci', 'bobot_nilai').maybeSingle()
+    bobot = setelan?.nilai ?? {}
+    // Jumlah tugas inti pada LKPD ini (pembagi nilai).
+    const { count } = await sb.from('tugas')
+      .select('id, sprint!inner(tujuan_pembelajaran_id)', { count: 'exact', head: true })
+      .eq('jenis', 'inti')
+      .eq('sprint.tujuan_pembelajaran_id', a.tujuan_pembelajaran.id)
+    intiTotal = count ?? 0
   } catch (err) {
     isi(wadah, el('div', { class: 'pesan pesan-galat' }, pesanGalat(err)))
     return
@@ -704,6 +715,22 @@ async function tampilKemajuan(wadah) {
 
   const xp = stat?.total_xp ?? 0
   const dapat = new Set(badges.map(b => b.badge.id))
+
+  // Hitung nilai total (gabungan) memakai statistik murid + pengaturan.
+  const KKM = bobot.kkm ?? 75
+  const AMBANG_HIJAU = bobot.ambang_hijau ?? 85
+  const hasilNilai = hitungNilai({
+    inti_selesai: stat?.tugas_selesai ?? 0,
+    inti_total: intiTotal,
+    tantangan_selesai: stat?.tantangan_selesai ?? 0,
+    jumlah_badge: stat?.jumlah_badge ?? 0,
+  }, bobot)
+  const nilaiTotal = hasilNilai.nilai
+  // Warna dinamis: merah < KKM, kuning-kehijauan lulus, hijau ≥ ambang.
+  const warnaNilai = nilaiTotal < KKM ? 'merah'
+    : nilaiTotal >= AMBANG_HIJAU ? 'hijau' : 'kuning'
+  const labelPredikat = nilaiTotal < KKM ? 'Belum Lulus'
+    : nilaiTotal >= AMBANG_HIJAU ? 'Sangat Baik' : 'Lulus'
 
   isi(wadah,
     el('div', { class: 'kepala' },
@@ -726,6 +753,17 @@ async function tampilKemajuan(wadah) {
             el('small', {}, ` / ${ambangBerikutnya(xp)} XP`)),
           el('div', { class: 'xp-bar' },
             el('i', { gaya: { width: persenKeBerikutnya(xp) + '%' } })),
+        ),
+
+        // Kartu nilai total + predikat, warna latar dinamis mengikuti nilai.
+        el('div', { class: 'nilai-kotak nilai-latar-' + warnaNilai },
+          el('div', { class: 'nilai-kotak-label' }, 'Nilai'),
+          el('div', { class: 'nilai-kotak-angka' }, String(nilaiTotal),
+            el('small', {}, ' / 100')),
+          el('div', { class: 'nilai-kotak-predikat' }, labelPredikat),
+          el('div', { class: 'nilai-kotak-ket' },
+            nilaiTotal < KKM ? `KKM ${KKM} — belum tercapai`
+              : `KKM ${KKM} — tercapai`),
         ),
 
         el('div', { class: 'panel' },
