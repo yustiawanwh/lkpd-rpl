@@ -170,10 +170,14 @@ export async function rekapNilaiPerSprint(penugasanId, tpId) {
 
   const intiKeSprint = {}       // tugas_id -> sprint_id
   const intiSet = new Set()     // tugas_id inti
+  const tantanganKeSprint = {}  // tugas_id (tantangan) -> sprint_id
   const daftarSprint = (sprints ?? []).map(s => {
     const inti = (s.tugas ?? []).filter(t => t.jenis === 'inti')
+    const tantangan = (s.tugas ?? []).filter(t => t.jenis === 'tantangan')
     inti.forEach(t => { intiKeSprint[t.id] = s.id; intiSet.add(t.id) })
-    return { id: s.id, nomor: s.nomor, nama: s.nama, intiTotal: inti.length }
+    tantangan.forEach(t => { tantanganKeSprint[t.id] = s.id })
+    return { id: s.id, nomor: s.nomor, nama: s.nama,
+             intiTotal: inti.length, tantanganTotal: tantangan.length }
   })
 
   // 2. Progres SELESAI + nilai huruf + waktu serah.
@@ -209,16 +213,28 @@ export async function rekapNilaiPerSprint(penugasanId, tpId) {
   }
 
   for (const p of (progres ?? [])) {
-    const sprintId = intiKeSprint[p.tugas_id]
-    if (!sprintId) continue
-    const m = pastikan(p.murid_id, p.profil)
-    if (!m.perSprint[sprintId]) m.perSprint[sprintId] = { huruf: [], badge: 0, serahTerakhir: null }
-    const ps = m.perSprint[sprintId]
-    ps.selesai = (ps.selesai ?? 0) + 1
-    if (p.nilai_huruf) ps.huruf.push(p.nilai_huruf)
-    if (p.diserahkan_pada) {
-      const t = new Date(p.diserahkan_pada)
-      if (!ps.serahTerakhir || t > ps.serahTerakhir) ps.serahTerakhir = t
+    const sprintInti = intiKeSprint[p.tugas_id]
+    const sprintTantangan = tantanganKeSprint[p.tugas_id]
+
+    // Tugas inti: kumpulkan huruf & waktu serah (untuk review & kecepatan).
+    if (sprintInti) {
+      const m = pastikan(p.murid_id, p.profil)
+      if (!m.perSprint[sprintInti]) m.perSprint[sprintInti] = { huruf: [], badge: 0, serahTerakhir: null, tantanganDinilai: 0 }
+      const ps = m.perSprint[sprintInti]
+      ps.selesai = (ps.selesai ?? 0) + 1
+      if (p.nilai_huruf) ps.huruf.push(p.nilai_huruf)
+      if (p.diserahkan_pada) {
+        const t = new Date(p.diserahkan_pada)
+        if (!ps.serahTerakhir || t > ps.serahTerakhir) ps.serahTerakhir = t
+      }
+    }
+
+    // Tugas tantangan yang sudah DINILAI: hitung untuk porsi tantangan.
+    if (sprintTantangan && p.nilai_huruf) {
+      const m = pastikan(p.murid_id, p.profil)
+      if (!m.perSprint[sprintTantangan]) m.perSprint[sprintTantangan] = { huruf: [], badge: 0, serahTerakhir: null, tantanganDinilai: 0 }
+      m.perSprint[sprintTantangan].tantanganDinilai =
+        (m.perSprint[sprintTantangan].tantanganDinilai ?? 0) + 1
     }
   }
 
