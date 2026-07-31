@@ -317,7 +317,10 @@ export function dialogTiket(tugas, saatBerubah) {
   muatLembarTiket()
 
   async function muatLembarTiket() {
-    const kode = tugas.lembar_kode
+    // lembar_kode bisa berisi beberapa kode (mis. "C1,C2,C3"). Di KARTU hanya
+    // tabel PERTAMA yang ditampilkan & bisa diisi; sisanya muncul di halaman
+    // Lembar (ikut terbuka saat timer tugas ini berjalan).
+    const kode = String(tugas.lembar_kode ?? '').split(/[,;]/)[0]?.trim()
     const tpId = keadaan.penugasan?.tujuan_pembelajaran?.id
     const penId = keadaan.penugasan?.id
     if (!kode || !tpId || !penId) return   // tugas ini tak punya tabel

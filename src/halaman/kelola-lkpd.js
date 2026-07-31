@@ -411,7 +411,7 @@ function dialogTugas(wadah, tpId, sprint, t = null) {
   const fMenit = el('input', { type: 'number', min: '0', placeholder: '50', value: t?.estimasi_menit ?? '' })
   const fXp = el('input', { type: 'number', min: '0', placeholder: '25', value: t?.xp ?? '' })
   const fBukti = el('input', { type: 'text', placeholder: 'Tabel A terisi lengkap', value: t?.bukti_diminta ?? '' })
-  const fLembar = el('input', { type: 'text', placeholder: 'mis. A (kosongkan bila tak ada)',
+  const fLembar = el('input', { type: 'text', placeholder: 'mis. C1 atau C1,C2,C3 (kosongkan bila tak ada)',
     value: t?.lembar_kode ?? '',
     gaya: { textTransform: 'uppercase' } })
   const fDesk = el('textarea', { rows: '3', placeholder: 'Apa yang harus dikerjakan murid.' }, t?.deskripsi ?? '')
@@ -478,7 +478,9 @@ function dialogTugas(wadah, tpId, sprint, t = null) {
           el('label', {}, 'Tabel yang diisi'),
           fLembar,
           el('div', { gaya: { fontSize: '11.5px', color: 'var(--tinta-lembut)', marginTop: '3px' } },
-            'Kode tabel yang muncul di tiket ini, mis. A. Kosongkan bila tak ada.'))),
+            'Kode tabel terkait tugas ini. Boleh beberapa dipisah koma (mis. C1,C2,C3). ' +
+            'Yang pertama (C1) tampil & bisa diisi di tiket; sisanya di halaman Lembar, ' +
+            'ikut terbuka saat timer tugas ini berjalan. Kosongkan bila tak ada.'))),
       el('label', { gaya: { display: 'flex', gap: '8px', alignItems: 'center', fontSize: '14px', cursor: 'pointer' } },
         fWajib, 'Bukti wajib diunggah'),
     ),

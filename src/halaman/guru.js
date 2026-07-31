@@ -983,22 +983,31 @@ async function muatKoreksi(p, tpId, penugasanId) {
       .select('id, nama_asli, path, mime, ukuran')
       .eq('progres_tugas_id', p.id)
 
-    // 2. Isian tabel (bila tugas terkait sebuah lembar).
-    let isian = null, lembar = null
-    if (p.tugas?.lembar_kode && tpId) {
-      const { data: lk } = await sb.from('lembar_kerja')
+    // 2. Isian tabel — tugas bisa terkait BEBERAPA lembar (kode dipisah koma,
+    //    mis. "C1,C2,C3"). Muat & tampilkan semuanya, bukan hanya yang pertama.
+    //    Pencocokan kode tidak peduli huruf besar/kecil.
+    const kodeLembar = String(p.tugas?.lembar_kode ?? '')
+      .split(/[,;]/).map(x => x.trim().toUpperCase()).filter(Boolean)
+    const lembarList = []   // { lembar, isian }
+    if (kodeLembar.length && tpId) {
+      // Ambil semua lembar TP lalu saring sesuai kode tugas (case-insensitive).
+      const { data: semuaLk } = await sb.from('lembar_kerja')
         .select('id, kode, judul, tipe, struktur')
-        .eq('tujuan_pembelajaran_id', tpId).eq('kode', p.tugas.lembar_kode).maybeSingle()
-      if (lk) {
-        lembar = lk
+        .eq('tujuan_pembelajaran_id', tpId)
+      const urut = {}; kodeLembar.forEach((k, i) => { urut[k] = i })
+      const lkTerurut = (semuaLk ?? [])
+        .filter(lk => kodeLembar.includes((lk.kode ?? '').toUpperCase()))
+        .sort((x, y) =>
+          (urut[(x.kode ?? '').toUpperCase()] ?? 99) - (urut[(y.kode ?? '').toUpperCase()] ?? 99))
+      for (const lk of lkTerurut) {
         const { data: is } = await sb.from('isian_lembar')
           .select('data').eq('penugasan_id', penugasanId)
           .eq('murid_id', p.murid_id).eq('lembar_kerja_id', lk.id).maybeSingle()
-        isian = is?.data ?? null
+        lembarList.push({ lembar: lk, isian: is?.data ?? null })
       }
     }
 
-    if (!lampiran?.length && !lembar) {
+    if (!lampiran?.length && !lembarList.length) {
       isi(wadah, el('div', { class: 'koreksi-kosong' },
         'Belum ada hasil pekerjaan yang bisa dikoreksi (tidak ada unggahan maupun tabel).'))
       return
@@ -1006,8 +1015,8 @@ async function muatKoreksi(p, tpId, penugasanId) {
 
     const anak = [el('div', { class: 'bagian-judul', gaya: { marginTop: '4px' } }, 'Hasil pekerjaan murid')]
 
-    // Tampilkan isian tabel (baca saja).
-    if (lembar) {
+    // Tampilkan SEMUA isian tabel terkait (baca saja).
+    for (const { lembar, isian } of lembarList) {
       anak.push(el('div', { gaya: { fontSize: '12.5px', fontWeight: '600', margin: '6px 0 4px' } },
         `Tabel ${lembar.kode} — ${lembar.judul}`))
       anak.push(tabelKoreksi(lembar, isian))

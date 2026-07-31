@@ -443,22 +443,30 @@ async function tampilLembar(wadah) {
 
   try {
     daftar = await muatLembar(a.tujuan_pembelajaran.id, a.id)
-    // Cari lembar mana yang tabelnya terkunci: yaitu yang menjadi
-    // lembar_kode dari tugas milik murid ini yang berstatus terkunci.
+    // lembar_kode bisa berisi BEBERAPA kode dipisah koma (mis. "C1,C2,C3").
+    // Semua kode itu dimiliki oleh tugas yang sama → mengikuti timer & kunci
+    // tugas tersebut.
+    const pisahKode = (s) => String(s ?? '').split(/[,;]/)
+      .map(x => x.trim().toUpperCase()).filter(Boolean)
+
     const { data: prog } = await sb.from('progres_tugas')
       .select('terkunci, tugas:tugas_id(id, lembar_kode)')
       .eq('penugasan_id', a.id).eq('murid_id', keadaan.profil.id)
-    kodeTerkunci = new Set((prog ?? [])
-      .filter(p => p.terkunci)
-      .map(p => p.tugas?.lembar_kode).filter(Boolean).map(k => k.toUpperCase()))
+
+    // Kode yang terkunci (tugas ditandai selesai/dinilai).
+    kodeTerkunci = new Set()
+    for (const p of (prog ?? [])) {
+      if (!p.terkunci) continue
+      for (const k of pisahKode(p.tugas?.lembar_kode)) kodeTerkunci.add(k)
+    }
     // Peta: kode lembar → daftar id tugas yang memakainya (untuk cek timer).
     petaKodeTugas = new Map()
     for (const p of (prog ?? [])) {
-      const kode = p.tugas?.lembar_kode
-      if (!kode || !p.tugas?.id) continue
-      const K = kode.toUpperCase()
-      if (!petaKodeTugas.has(K)) petaKodeTugas.set(K, [])
-      petaKodeTugas.get(K).push(p.tugas.id)
+      if (!p.tugas?.id) continue
+      for (const K of pisahKode(p.tugas?.lembar_kode)) {
+        if (!petaKodeTugas.has(K)) petaKodeTugas.set(K, [])
+        petaKodeTugas.get(K).push(p.tugas.id)
+      }
     }
   } catch (err) {
     isi(wadah, el('div', { class: 'pesan pesan-galat' }, pesanGalat(err)))
