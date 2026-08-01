@@ -302,6 +302,8 @@ function dialogTpUbah(wadah, tp) {
   const fKode = el('input', { type: 'text', value: tp.kode })
   const fJudul = el('input', { type: 'text', value: tp.judul })
   const fDesk = el('textarea', { rows: '3' }, tp.deskripsi ?? '')
+  const fPetunjuk = el('textarea', { rows: '3' }, tp.petunjuk_umum ?? '')
+  const fMateri = el('textarea', { rows: '4' }, tp.materi_awal ?? '')
   const fJp = el('input', { type: 'number', min: '0', value: tp.total_jp ?? '' })
   const galat = el('div')
   let tutup
@@ -313,6 +315,8 @@ function dialogTpUbah(wadah, tp) {
       const { error } = await sb.from('tujuan_pembelajaran').update({
         kode: fKode.value.trim(), judul: fJudul.value.trim(),
         deskripsi: fDesk.value.trim() || null,
+        petunjuk_umum: fPetunjuk.value.trim() || null,
+        materi_awal: fMateri.value.trim() || null,
         total_jp: fJp.value ? Number(fJp.value) : 0,
       }).eq('id', tp.id)
       if (error) throw error
@@ -329,7 +333,9 @@ function dialogTpUbah(wadah, tp) {
         el('div', { class: 'ruas' }, el('label', {}, 'Kode'), fKode),
         el('div', { class: 'ruas' }, el('label', {}, 'Total JP'), fJp)),
       el('div', { class: 'ruas' }, el('label', {}, 'Judul'), fJudul),
-      el('div', { class: 'ruas' }, el('label', {}, 'Deskripsi'), fDesk)),
+      el('div', { class: 'ruas' }, el('label', {}, 'Latar belakang / deskripsi'), fDesk),
+      el('div', { class: 'ruas' }, el('label', {}, 'Petunjuk pengerjaan'), fPetunjuk),
+      el('div', { class: 'ruas' }, el('label', {}, 'Materi awal / bahan bacaan'), fMateri)),
     kaki: [el('div', { gaya: { marginLeft: 'auto', display: 'flex', gap: '8px' } },
       el('button', { class: 'tbl', onClick: () => tutup() }, 'Batal'), simpan)],
     lebar: '520px',

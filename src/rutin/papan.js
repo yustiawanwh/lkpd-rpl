@@ -12,7 +12,7 @@ import { sb } from '../lib/supabase.js'
 export async function muatPapan(penugasanId) {
   const { data: penugasan, error: e1 } = await sb
     .from('penugasan')
-    .select('id, dibuka, tenggat, tujuan_pembelajaran(id, kode, judul, total_menit)')
+    .select('id, dibuka, tenggat, tujuan_pembelajaran(id, kode, judul, total_menit, deskripsi, petunjuk_umum, materi_awal)')
     .eq('id', penugasanId)
     .single()
   if (e1) throw e1

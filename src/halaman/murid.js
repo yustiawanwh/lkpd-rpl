@@ -235,6 +235,37 @@ function gabungKelas() {
 /* ==========================================================
    Papan kanban
    ========================================================== */
+// Panel pengantar LKPD (latar belakang, petunjuk, materi awal) yang bisa
+// dibuka/tutup. Muncul hanya bila ada isinya.
+function pengantarLkpd(tp) {
+  if (!tp) return null
+  const bagian = [
+    ['Latar belakang', tp.deskripsi],
+    ['Petunjuk pengerjaan', tp.petunjuk_umum],
+    ['Materi awal', tp.materi_awal],
+  ].filter(([, t]) => t && String(t).trim())
+  if (!bagian.length) return null
+
+  let terbuka = false
+  const isiPanel = el('div', { class: 'pengantar-isi', gaya: { display: 'none' } },
+    ...bagian.map(([judul, teks]) =>
+      el('div', { class: 'pengantar-bagian' },
+        el('div', { class: 'pengantar-judul' }, judul),
+        el('div', { class: 'pengantar-teks' }, teks))))
+
+  const panah = el('span', { class: 'arsip-panah' }, '▸')
+  const kepala = el('button', { class: 'pengantar-kepala', 'aria-expanded': 'false',
+    onClick: () => {
+      terbuka = !terbuka
+      panah.textContent = terbuka ? '▾' : '▸'
+      kepala.setAttribute('aria-expanded', String(terbuka))
+      isiPanel.style.display = terbuka ? '' : 'none'
+    } },
+    panah, el('span', {}, '📖 Pengantar & materi — ketuk untuk baca dulu'))
+
+  return el('div', { class: 'pengantar' }, kepala, isiPanel)
+}
+
 async function tampilPapan(wadah) {
   const a = keadaan.penugasan
   let data
@@ -268,6 +299,9 @@ async function tampilPapan(wadah) {
     const R = 26, K = 2 * Math.PI * R
 
     isi(wadah,
+      // Pengantar LKPD (latar belakang, petunjuk, materi) — bisa dibuka/tutup.
+      pengantarLkpd(data.tujuan_pembelajaran),
+
       // Tab sprint
       el('div', { class: 'tab-lembar', role: 'tablist' },
         ...data.sprints.map(x => {

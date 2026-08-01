@@ -726,3 +726,16 @@ textarea:disabled,input:disabled{opacity:.55;cursor:not-allowed;background:var(-
 /* Lencana susulan di tabel nilai */
 .lencana-susulan{display:inline-block;margin-left:6px;font-size:10.5px;font-weight:700;
   padding:1px 6px;border-radius:20px;background:#fef3e2;color:#8a6a2f;vertical-align:middle}
+
+/* Pengantar LKPD (latar belakang, petunjuk, materi) di papan murid */
+.pengantar{border:1px solid var(--garis);border-radius:12px;overflow:hidden;margin-bottom:14px;
+  background:var(--kertas)}
+.pengantar-kepala{width:100%;border:none;background:var(--hijau-lembut);cursor:pointer;font:inherit;
+  text-align:left;display:flex;align-items:center;gap:10px;padding:11px 14px;font-weight:600;font-size:13.5px}
+.pengantar-kepala:hover{filter:brightness(.98)}
+.pengantar-isi{padding:14px}
+.pengantar-bagian{margin-bottom:14px}
+.pengantar-bagian:last-child{margin-bottom:0}
+.pengantar-judul{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
+  color:var(--hijau);margin-bottom:5px}
+.pengantar-teks{font-size:14px;line-height:1.6;color:var(--tinta);white-space:pre-wrap}
