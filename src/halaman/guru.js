@@ -11,6 +11,7 @@ import { halamanLkpd, halamanSuntingLkpd } from './kelola-lkpd.js'
 import { halamanNilai } from './nilai.js'
 import { halamanPengawasan } from './pengawasan.js'
 import { halamanDashboard } from './dashboard.js'
+import { jarakSidik } from './tiket.js'
 
 export async function halamanGuru(wadah, r) {
   const tampilan = r.nama || 'kelas'
@@ -24,6 +25,7 @@ export async function halamanGuru(wadah, r) {
     if (tampilan === 'kelas' && r.bagian[0]) await detilKelas(utama, Number(r.bagian[0]))
     else if (tampilan === 'nilai' && r.bagian[0]) await antreanReview(utama, Number(r.bagian[0]))
     else if (tampilan === 'arsip' && r.bagian[0]) await arsipDinilai(utama, Number(r.bagian[0]))
+    else if (tampilan === 'mirip' && r.bagian[0]) await halamanKemiripan(utama, Number(r.bagian[0]))
     else if (tampilan === 'rekap' && r.bagian[0]) await halamanNilai(utama, Number(r.bagian[0]))
     else if (tampilan === 'awasi' && r.bagian[0]) await halamanPengawasan(utama, Number(r.bagian[0]))
     else if (tampilan === 'dashboard') await halamanDashboard(utama)
@@ -308,7 +310,7 @@ async function detilKelas(wadah, kelasId) {
                 p.tujuan_pembelajaran.kode),
               el('div', { gaya: { fontWeight: '600' } }, p.tujuan_pembelajaran.judul),
               p.tenggat && el('div', { gaya: { fontSize: '12px', color: 'var(--tinta-lembut)' } },
-                'Tenggat ' + tanggalId(p.tenggat)),
+                'Tenggat ' + tanggalId(p.tenggat, true)),
             ),
             el('span', { class: 'lencana ' + (p.dibuka ? 'lencana-selesai' : 'lencana-backlog') },
               p.dibuka ? 'Dibuka' : 'Ditutup'),
@@ -319,6 +321,8 @@ async function detilKelas(wadah, kelasId) {
                              onClick: () => pergiKe(`nilai/${p.id}`) }, 'Review'),
               el('button', { class: 'tbl tbl-kecil',
                              onClick: () => pergiKe(`arsip/${p.id}`) }, 'Sudah Dinilai'),
+              el('button', { class: 'tbl tbl-kecil',
+                             onClick: () => pergiKe(`mirip/${p.id}`) }, '🔍 Kemiripan'),
               el('button', { class: 'tbl tbl-kecil',
                              onClick: () => pergiKe(`rekap/${p.id}`) }, 'Nilai'),
               el('button', { class: 'tbl tbl-kecil tbl-bahaya',
@@ -665,7 +669,7 @@ async function dialogTugaskan(kelasId) {
 
   const fTp = el('select', {}, ...tp.map(t => el('option', { value: t.id }, `${t.kode} — ${t.judul}`)))
   const fMulai = el('input', { type: 'date' })
-  const fTenggat = el('input', { type: 'date' })
+  const fTenggat = el('input', { type: 'datetime-local' })
   const galat = el('div')
 
   let tutup
@@ -679,7 +683,7 @@ async function dialogTugaskan(kelasId) {
         kelas_id: kelasId,
         tujuan_pembelajaran_id: Number(fTp.value),
         mulai: fMulai.value || null,
-        tenggat: fTenggat.value || null,
+        tenggat: fTenggat.value ? new Date(fTenggat.value).toISOString() : null,
         dibuka: true,
       })
       if (error) {
@@ -973,6 +977,151 @@ function kartuArsip(p, penugasanId, wadah) {
   )
 }
 
+// Penanda kemiripan (alat bantu guru, TIDAK memengaruhi nilai). Membandingkan
+// bukti gambar (via sidik perceptual-hash) dan isian tabel antar murid pada
+// satu penugasan, lalu menandai pasangan yang mencurigakan.
+async function halamanKemiripan(wadah, penugasanId) {
+  const { data: pen } = await sb.from('penugasan')
+    .select('id, kelas_id, kelas(nama), tujuan_pembelajaran(id, kode, judul)')
+    .eq('id', penugasanId).single()
+
+  isi(wadah, el('div', { class: 'kepala' },
+    el('div', {},
+      el('button', { class: 'tbl tbl-kecil tbl-hantu', gaya: { padding: '2px 0', marginBottom: '4px' },
+                     onClick: () => pergiKe(`kelas/${pen.kelas_id}`) }, '← Kembali ke kelas'),
+      el('h1', {}, '🔍 Penanda Kemiripan'),
+      el('p', {}, `${pen.kelas?.nama} · ${pen.tujuan_pembelajaran?.kode}`)),
+  ), el('div', { class: 'panel' }, el('div', { class: 'panel-isi' },
+    el('p', { gaya: { color: 'var(--tinta-lembut)' } }, 'Memeriksa kemiripan…'))))
+
+  // Ambil bukti gambar (dengan sidik) + isian tabel, beserta nama murid.
+  const [{ data: lampiran }, { data: isian }, { data: pendaftaran }] = await Promise.all([
+    sb.from('lampiran')
+      .select('murid_id, path, sidik, progres_tugas:progres_tugas_id(tugas:tugas_id(kode))')
+      .not('sidik', 'is', null),
+    sb.from('isian_lembar')
+      .select('murid_id, lembar_kerja_id, data, lembar_kerja:lembar_kerja_id(kode)')
+      .eq('penugasan_id', penugasanId),
+    sb.from('pendaftaran')
+      .select('murid_id, profil:murid_id(nama, no_absen)')
+      .eq('kelas_id', pen.kelas_id).eq('aktif', true),
+  ])
+
+  const nama = {}
+  for (const d of (pendaftaran ?? [])) nama[d.murid_id] = d.profil?.nama ?? '—'
+  const muridLampiran = new Set((lampiran ?? []).map(l => l.murid_id))
+
+  // 1. Kemiripan GAMBAR: bandingkan tiap pasang bukti dengan jarak Hamming.
+  //    Jarak kecil (<= 8 dari 256 bit) = sangat mirip / identik.
+  const AMBANG_GAMBAR = 8
+  const pasanganGambar = []
+  const L = (lampiran ?? []).filter(l => l.sidik)
+  for (let i = 0; i < L.length; i++) {
+    for (let j = i + 1; j < L.length; j++) {
+      if (L[i].murid_id === L[j].murid_id) continue   // lewati milik murid sama
+      const jarak = jarakSidik(L[i].sidik, L[j].sidik)
+      if (jarak <= AMBANG_GAMBAR) {
+        pasanganGambar.push({
+          a: L[i].murid_id, b: L[j].murid_id, jarak,
+          tugasA: L[i].progres_tugas?.tugas?.kode, tugasB: L[j].progres_tugas?.tugas?.kode,
+        })
+      }
+    }
+  }
+  pasanganGambar.sort((x, y) => x.jarak - y.jarak)
+
+  // 2. Kemiripan ISIAN TABEL: bandingkan data JSON per lembar antar murid.
+  const AMBANG_TEKS = 0.85   // >= 85% sel sama dianggap mencurigakan
+  const perLembar = {}
+  for (const it of (isian ?? [])) {
+    const k = it.lembar_kerja_id
+    if (!perLembar[k]) perLembar[k] = []
+    perLembar[k].push(it)
+  }
+  const kemiripanSel = (a, b) => {
+    // Bandingkan nilai sel; hitung proporsi sel yang sama (dan tidak kosong).
+    const semuaKunci = new Set([...Object.keys(a ?? {}), ...Object.keys(b ?? {})])
+    let total = 0, sama = 0
+    for (const baris of semuaKunci) {
+      const ra = a?.[baris] ?? {}, rb = b?.[baris] ?? {}
+      const kolom = new Set([...Object.keys(ra), ...Object.keys(rb)])
+      for (const kol of kolom) {
+        const va = String(ra[kol] ?? '').trim(), vb = String(rb[kol] ?? '').trim()
+        if (va === '' && vb === '') continue
+        total++
+        if (va !== '' && va === vb) sama++
+      }
+    }
+    return total > 0 ? sama / total : 0
+  }
+  const pasanganTeks = []
+  for (const k of Object.keys(perLembar)) {
+    const arr = perLembar[k]
+    for (let i = 0; i < arr.length; i++) {
+      for (let j = i + 1; j < arr.length; j++) {
+        if (arr[i].murid_id === arr[j].murid_id) continue
+        const rasio = kemiripanSel(arr[i].data, arr[j].data)
+        if (rasio >= AMBANG_TEKS) {
+          pasanganTeks.push({
+            a: arr[i].murid_id, b: arr[j].murid_id, rasio,
+            lembar: arr[i].lembar_kerja?.kode ?? '?',
+          })
+        }
+      }
+    }
+  }
+  pasanganTeks.sort((x, y) => y.rasio - x.rasio)
+
+  // Render hasil.
+  const bagian = []
+  bagian.push(el('div', { class: 'pesan pesan-info', gaya: { marginBottom: '14px' } },
+    'Ini alat bantu, bukan tuduhan. Kemiripan tinggi bisa berarti menyalin, tetapi ' +
+    'bisa juga wajar (mis. tabel referensi berisi jawaban baku). Tinjau sebelum menindak.'))
+
+  // Bagian gambar.
+  bagian.push(el('div', { class: 'bagian-judul' }, `Bukti gambar mirip (${pasanganGambar.length})`))
+  if (!pasanganGambar.length) {
+    bagian.push(el('p', { gaya: { color: 'var(--tinta-lembut)', fontSize: '13px' } },
+      muridLampiran.size ? 'Tidak ada bukti gambar yang mirip terdeteksi.'
+        : 'Belum ada bukti gambar dengan sidik (unggahan lama belum bersidik).'))
+  } else {
+    bagian.push(el('div', { class: 'tumpuk' }, ...pasanganGambar.map(p =>
+      el('div', { class: 'mirip-baris' },
+        el('span', { class: 'mirip-nama' }, nama[p.a] ?? '—'),
+        el('span', { class: 'mirip-vs' }, '↔'),
+        el('span', { class: 'mirip-nama' }, nama[p.b] ?? '—'),
+        el('span', { class: 'mirip-skor ' + (p.jarak <= 2 ? 'tinggi' : 'sedang') },
+          p.jarak === 0 ? 'identik' : `mirip (beda ${p.jarak})`),
+        (p.tugasA || p.tugasB) && el('span', { class: 'mirip-ket' },
+          `${p.tugasA ?? '?'}${p.tugasB && p.tugasB !== p.tugasA ? ' / ' + p.tugasB : ''}`)))))
+  }
+
+  // Bagian tabel.
+  bagian.push(el('div', { class: 'bagian-judul', gaya: { marginTop: '18px' } },
+    `Isian tabel mirip (${pasanganTeks.length})`))
+  if (!pasanganTeks.length) {
+    bagian.push(el('p', { gaya: { color: 'var(--tinta-lembut)', fontSize: '13px' } },
+      'Tidak ada isian tabel yang mencurigakan.'))
+  } else {
+    bagian.push(el('div', { class: 'tumpuk' }, ...pasanganTeks.map(p =>
+      el('div', { class: 'mirip-baris' },
+        el('span', { class: 'mirip-nama' }, nama[p.a] ?? '—'),
+        el('span', { class: 'mirip-vs' }, '↔'),
+        el('span', { class: 'mirip-nama' }, nama[p.b] ?? '—'),
+        el('span', { class: 'mirip-skor ' + (p.rasio >= 0.95 ? 'tinggi' : 'sedang') },
+          `${Math.round(p.rasio * 100)}% sama`),
+        el('span', { class: 'mirip-ket' }, `Tabel ${p.lembar}`)))))
+  }
+
+  isi(wadah, el('div', { class: 'kepala' },
+    el('div', {},
+      el('button', { class: 'tbl tbl-kecil tbl-hantu', gaya: { padding: '2px 0', marginBottom: '4px' },
+                     onClick: () => pergiKe(`kelas/${pen.kelas_id}`) }, '← Kembali ke kelas'),
+      el('h1', {}, '🔍 Penanda Kemiripan'),
+      el('p', {}, `${pen.kelas?.nama} · ${pen.tujuan_pembelajaran?.kode}`)),
+  ), el('div', { class: 'panel' }, el('div', { class: 'panel-isi' }, ...bagian)))
+}
+
 async function muatKoreksi(p, tpId, penugasanId) {
   const wadah = document.querySelector(`.wadah-koreksi[data-pid="${p.id}"]`)
   if (!wadah) return
@@ -1075,6 +1224,20 @@ function kartuReview(p, penugasanId, wadah) {
   const umpan = el('textarea', { rows: '2', 'aria-label': 'Umpan balik',
     placeholder: 'Umpan balik untuk murid (opsional saat menilai, wajib bila dikembalikan)' })
 
+  // Hapus HANYA kartu ini dari DOM (tanpa memuat ulang seluruh halaman/gambar).
+  // Bila grup murid jadi kosong, hapus grupnya juga.
+  function lepasKartu() {
+    const grup = kartu.closest('.grup-murid')
+    kartu.remove()
+    if (grup && !grup.querySelector('.panel')) grup.remove()
+    if (!wadah.querySelector('.panel')) {
+      isi(wadah.querySelector('.tumpuk-murid') || wadah,
+        el('div', { class: 'kosong', gaya: { padding: '24px' } },
+          el('h3', {}, 'Semua sudah diperiksa'),
+          el('p', {}, 'Tidak ada lagi tugas yang menunggu review.')))
+    }
+  }
+
   async function beriNilai(huruf) {
     try {
       const { error } = await sb.rpc('nilai_tugas', {
@@ -1082,7 +1245,7 @@ function kartuReview(p, penugasanId, wadah) {
       })
       if (error) throw error
       roti(`${p.tugas.kode} dinilai ${huruf} — dikunci`)
-      antreanReview(wadah, penugasanId)
+      lepasKartu()
     } catch (err) { roti(pesanGalat(err), '⚠') }
   }
 
@@ -1098,13 +1261,13 @@ function kartuReview(p, penugasanId, wadah) {
       }).eq('id', p.id)
       if (error) throw error
       roti(`${p.tugas.kode} dikembalikan untuk diperbaiki`)
-      antreanReview(wadah, penugasanId)
+      lepasKartu()
     } catch (err) { roti(pesanGalat(err), '⚠') }
   }
 
   const lewat = p.tugas.estimasi_menit > 0 && p.detik_terpakai > p.tugas.estimasi_menit * 60
 
-  return el('div', { class: 'panel' },
+  const kartu = el('div', { class: 'panel' },
     el('div', { class: 'panel-isi' },
       el('div', { gaya: { display: 'flex', gap: '12px', alignItems: 'flex-start', flexWrap: 'wrap' } },
         el('div', { class: 'avatar' }, inisial(p.profil?.nama)),
@@ -1146,4 +1309,5 @@ function kartuReview(p, penugasanId, wadah) {
       ),
     ),
   )
+  return kartu
 }

@@ -147,7 +147,7 @@ async function daftarKelas(wadah) {
             el('p', { gaya: { margin: 0, fontSize: '13px', color: 'var(--tinta-lembut)' } },
               [a.kelas?.nama, a.kelas?.mata_pelajaran?.nama,
                a.tujuan_pembelajaran.total_jp ? `${a.tujuan_pembelajaran.total_jp} JP` : null,
-               a.tenggat ? `Tenggat ${tanggalId(a.tenggat)}` : null,
+               a.tenggat ? `Tenggat ${tanggalId(a.tenggat, true)}` : null,
               ].filter(Boolean).join(' · ')),
           ),
         )),
@@ -737,9 +737,7 @@ async function tampilKemajuan(wadah) {
         jumlahBadge: ps.badge ?? 0,
         tantanganTotal: s.tantanganTotal ?? 0,
         tantanganDinilai: ps.tantanganDinilai ?? 0,
-        kecepatan: ps.peringkat != null
-          ? { peringkat: ps.peringkat, jumlahKumpul: ps.jumlahKumpul, jamTelat: ps.jamTelat }
-          : null,
+        kecepatan: { tanpaTenggat: ps.tanpaTenggat === true, sudahKumpul: ps.sudahKumpul === true, hariTelat: ps.hariTelat ?? 0 },
       }, bobot)
       jml += hasil.nilai
     }

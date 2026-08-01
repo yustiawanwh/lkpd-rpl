@@ -101,7 +101,6 @@ export function dialogTiket(tugas, saatBerubah) {
   const pr = tugas.progres ?? {}
   let detik = pr.detik_terpakai ?? 0
   let status = pr.status ?? 'backlog'
-  let lampiran = null
   let tutup
 
   // Tugas terkunci: seluruh input (timer, catatan, bukti) dinonaktifkan.
@@ -196,72 +195,106 @@ export function dialogTiket(tugas, saatBerubah) {
     onInput: (e) => { tandaCat.textContent = 'Menyimpan…'; simpanCat(e.target.value) },
   }, pr.catatan ?? '')
 
-  /* ---- Bukti ---- */
-  const berkasInput = el('input', { type: 'file', accept: 'image/*', hidden: true,
+  /* ---- Bukti (boleh beberapa, terus menambah) ---- */
+  let daftarBukti = []   // { id, nama_asli, path }
+  const berkasInput = el('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true,
                                      onChange: pilihBerkas })
   const kotakUnggah = el('button', { class: 'unggah', disabled: terkunci || !bolehAwal,
                                       onClick: () => { if (sedangKerja()) berkasInput.click() } },
-    el('div', { class: 'unggah-judul' }, terkunci ? 'Bukti terkunci' : 'Pilih tangkapan layar'),
+    el('div', { class: 'unggah-judul' }, terkunci ? 'Bukti terkunci' : 'Tambah tangkapan layar'),
     el('div', { class: 'unggah-ket' }, terkunci
       ? 'Tugas sudah dikunci — bukti tidak bisa diganti'
-      : (bolehAwal ? (tugas.bukti_diminta ?? 'PNG atau JPG, maksimal 5 MB')
+      : (bolehAwal ? (tugas.bukti_diminta ?? 'Boleh beberapa gambar. PNG/JPG, maks 5 MB per gambar')
                    : 'Tekan “Mulai” dulu untuk mengaktifkan')),
   )
-  const pratinjau = el('div')
+  const pratinjau = el('div', { class: 'bukti-galeri' })
 
   async function pilihBerkas() {
-    const f = berkasInput.files?.[0]
-    if (!f) return
-
-    if (f.size > 5 * 1024 * 1024) {
-      roti('Berkas terlalu besar — maksimal 5 MB', '⚠')
-      return
-    }
-
+    const berkas = Array.from(berkasInput.files ?? [])
+    if (!berkas.length) return
     kotakUnggah.disabled = true
-    $('.unggah-judul', kotakUnggah).textContent = 'Mengecilkan gambar…'
+    let sukses = 0
 
-    try {
-      const kecil = await kecilkanGambar(f)
-      $('.unggah-judul', kotakUnggah).textContent = 'Mengunggah…'
-
-      const nama = `${keadaan.profil.id}/${tugas.id}-${Date.now()}.jpg`
-      const { error: e1 } = await sb.storage.from('bukti')
-        .upload(nama, kecil, { contentType: 'image/jpeg', upsert: true })
-      if (e1) throw e1
-
-      // Pastikan baris progres ada, lalu tautkan lampirannya
-      const p = await ubahStatus(keadaan.penugasan.id, keadaan.profil.id, tugas.id, status)
-
-      const { error: e2 } = await sb.from('lampiran').insert({
-        murid_id: keadaan.profil.id, progres_tugas_id: p.id,
-        nama_asli: f.name, path: nama, mime: 'image/jpeg', ukuran: kecil.size,
-      })
-      if (e2) throw e2
-
-      lampiran = { nama_asli: f.name, path: nama }
-      kotakUnggah.classList.add('ada')
-      $('.unggah-judul', kotakUnggah).textContent = '📎 ' + f.name
-      $('.unggah-ket', kotakUnggah).textContent = 'Ketuk untuk mengganti'
-      tampilPratinjau(nama)
-      roti('Bukti tersimpan')
-    } catch (err) {
-      $('.unggah-judul', kotakUnggah).textContent = 'Pilih tangkapan layar'
-      roti(pesanGalat(err), '⚠')
-    } finally {
-      kotakUnggah.disabled = false
-      berkasInput.value = ''
+    for (let i = 0; i < berkas.length; i++) {
+      const f = berkas[i]
+      if (f.size > 5 * 1024 * 1024) {
+        roti(`"${f.name}" terlalu besar — dilewati (maks 5 MB)`, '⚠')
+        continue
+      }
+      $('.unggah-judul', kotakUnggah).textContent =
+        berkas.length > 1 ? `Mengunggah ${i + 1}/${berkas.length}…` : 'Mengunggah…'
+      try {
+        const kecil = await kecilkanGambar(f)
+        const sidik = await sidikGambar(kecil)
+        const nama = `${keadaan.profil.id}/${tugas.id}-${Date.now()}-${i}.jpg`
+        const { error: e1 } = await sb.storage.from('bukti')
+          .upload(nama, kecil, { contentType: 'image/jpeg', upsert: true })
+        if (e1) throw e1
+        const p = await ubahStatus(keadaan.penugasan.id, keadaan.profil.id, tugas.id, status)
+        const { data: baris, error: e2 } = await sb.from('lampiran').insert({
+          murid_id: keadaan.profil.id, progres_tugas_id: p.id,
+          nama_asli: f.name, path: nama, mime: 'image/jpeg', ukuran: kecil.size, sidik,
+        }).select('id, nama_asli, path').single()
+        if (e2) throw e2
+        daftarBukti.push(baris)
+        sukses++
+      } catch (err) {
+        roti(`Gagal mengunggah "${f.name}": ${pesanGalat(err)}`, '⚠')
+      }
     }
+
+    if (sukses) roti(sukses > 1 ? `${sukses} bukti tersimpan` : 'Bukti tersimpan')
+    perbaruiKotakBukti()
+    gambarGaleri()
+    kotakUnggah.disabled = false
+    berkasInput.value = ''
   }
 
-  async function tampilPratinjau(path) {
+  function perbaruiKotakBukti() {
+    if (terkunci) return
+    kotakUnggah.classList.toggle('ada', daftarBukti.length > 0)
+    $('.unggah-judul', kotakUnggah).textContent = daftarBukti.length
+      ? `📎 ${daftarBukti.length} bukti — ketuk untuk menambah`
+      : 'Tambah tangkapan layar'
+    $('.unggah-ket', kotakUnggah).textContent = daftarBukti.length
+      ? 'Boleh menambah lagi'
+      : (tugas.bukti_diminta ?? 'Boleh beberapa gambar. PNG/JPG, maks 5 MB per gambar')
+  }
+
+  async function hapusBukti(item) {
+    const ya = await konfirmasi({
+      judul: 'Hapus bukti?', pesan: `Hapus "${item.nama_asli}"? Tindakan ini tidak bisa dibatalkan.`,
+      tombol: 'Hapus', bahaya: true,
+    })
+    if (!ya) return
     try {
-      const { data } = await sb.storage.from('bukti').createSignedUrl(path, 3600)
-      if (data?.signedUrl) {
-        isi(pratinjau, el('img', { class: 'bukti-gambar', src: data.signedUrl,
+      await sb.storage.from('bukti').remove([item.path]).catch(() => {})
+      const { error } = await sb.from('lampiran').delete().eq('id', item.id)
+      if (error) throw error
+      daftarBukti = daftarBukti.filter(x => x.id !== item.id)
+      perbaruiKotakBukti()
+      gambarGaleri()
+      roti('Bukti dihapus')
+    } catch (err) { roti(pesanGalat(err), '⚠') }
+  }
+
+  async function gambarGaleri() {
+    isi(pratinjau)
+    for (const item of daftarBukti) {
+      const kartu = el('div', { class: 'bukti-item' })
+      try {
+        const { data } = await sb.storage.from('bukti').createSignedUrl(item.path, 3600)
+        if (data?.signedUrl) {
+          kartu.append(el('img', { class: 'bukti-gambar', src: data.signedUrl,
                                     alt: 'Bukti ' + tugas.kode }))
+        }
+      } catch {}
+      if (!terkunci) {
+        kartu.append(el('button', { class: 'bukti-hapus', title: 'Hapus bukti',
+          onClick: () => hapusBukti(item) }, '✕'))
       }
-    } catch {}
+      pratinjau.append(kartu)
+    }
   }
 
   /* ---- Status ---- */
@@ -461,20 +494,15 @@ export function dialogTiket(tugas, saatBerubah) {
     },
   })
 
-  // Muat bukti yang sudah ada
+  // Muat semua bukti yang sudah ada
   ;(async () => {
     if (!pr.id) return
     try {
-      const { data } = await sb.from('lampiran').select('*')
-        .eq('progres_tugas_id', pr.id).order('id', { ascending: false }).limit(1)
-      if (data?.[0]) {
-        lampiran = data[0]
-        kotakUnggah.classList.add('ada')
-        $('.unggah-judul', kotakUnggah).textContent = '📎 ' + data[0].nama_asli
-        $('.unggah-ket', kotakUnggah).textContent = terkunci
-          ? 'Terkunci — tidak bisa diganti' : 'Ketuk untuk mengganti'
-        tampilPratinjau(data[0].path)
-      }
+      const { data } = await sb.from('lampiran').select('id, nama_asli, path')
+        .eq('progres_tugas_id', pr.id).order('id', { ascending: true })
+      daftarBukti = data ?? []
+      perbaruiKotakBukti()
+      gambarGaleri()
     } catch {}
   })()
 
@@ -520,4 +548,57 @@ export function kecilkanGambar(berkas, maksSisi = 1400, mutu = 0.72) {
     img.onerror = () => { URL.revokeObjectURL(url); gagal(new Error('Berkas bukan gambar yang bisa dibaca')) }
     img.src = url
   })
+}
+
+/**
+ * Sidik gambar (perceptual hash / average-hash 16x16 = 256 bit).
+ * Gambar diperkecil ke 16x16 abu-abu, lalu tiap piksel ditandai 1 bila di atas
+ * rata-rata. Gambar identik/mirip menghasilkan hash sama/berdekatan (jarak
+ * Hamming kecil). Dikembalikan sebagai string hex 64 karakter.
+ */
+export function sidikGambar(berkas) {
+  return new Promise((selesai) => {
+    try {
+      const url = URL.createObjectURL(berkas)
+      const img = new Image()
+      img.onload = () => {
+        URL.revokeObjectURL(url)
+        const N = 16
+        const k = document.createElement('canvas')
+        k.width = N; k.height = N
+        const ctx = k.getContext('2d')
+        ctx.drawImage(img, 0, 0, N, N)
+        const d = ctx.getImageData(0, 0, N, N).data
+        const abu = new Array(N * N)
+        let jml = 0
+        for (let i = 0; i < N * N; i++) {
+          const r = d[i*4], g = d[i*4+1], b = d[i*4+2]
+          const v = 0.299*r + 0.587*g + 0.114*b
+          abu[i] = v; jml += v
+        }
+        const rata = jml / (N * N)
+        // Rakit bit menjadi hex.
+        let hex = ''
+        for (let i = 0; i < N * N; i += 4) {
+          let nib = 0
+          for (let j = 0; j < 4; j++) if (abu[i + j] > rata) nib |= (1 << (3 - j))
+          hex += nib.toString(16)
+        }
+        selesai(hex)
+      }
+      img.onerror = () => { URL.revokeObjectURL(url); selesai(null) }
+      img.src = url
+    } catch (_) { selesai(null) }
+  })
+}
+
+/** Jarak Hamming antara dua sidik hex (jumlah bit berbeda). 0 = identik. */
+export function jarakSidik(a, b) {
+  if (!a || !b || a.length !== b.length) return Infinity
+  let d = 0
+  for (let i = 0; i < a.length; i++) {
+    let x = parseInt(a[i], 16) ^ parseInt(b[i], 16)
+    while (x) { d += x & 1; x >>= 1 }
+  }
+  return d
 }

@@ -70,33 +70,36 @@ ok('1 tugas dinilai A dari 4 inti = 25', () => nilaiReview(['A'], 4) === 25)
 ok('kosong = 0', () => nilaiReview([], 4) === 0)
 ok('huruf E = 40', () => NILAI_HURUF.E === 40)
 
-bab('Model baru: nilai kecepatan (peringkat + penalti)')
-ok('tercepat dari 5 = 100', () => nilaiKecepatan({peringkat:1, jumlahKumpul:5, jamTelat:0}) === 100)
-ok('terakhir dari 5 = 60', () => nilaiKecepatan({peringkat:5, jumlahKumpul:5, jamTelat:0}) === 60)
-ok('sendirian = 100', () => nilaiKecepatan({peringkat:1, jumlahKumpul:1, jamTelat:0}) === 100)
-ok('belum kumpul = 0', () => nilaiKecepatan({peringkat:null}) === 0)
-ok('telat 3 jam kurangi 6', () => nilaiKecepatan({peringkat:1, jumlahKumpul:1, jamTelat:3}) === 94)
-ok('telat parah dibatasi maks 40', () => nilaiKecepatan({peringkat:1, jumlahKumpul:1, jamTelat:100}) === 60)
+bab('Model baru: nilai KETEPATAN WAKTU (berbasis tenggat per-hari)')
+ok('tanpa tenggat = 100', () => nilaiKecepatan({tanpaTenggat:true}) === 100)
+ok('tepat waktu = 100', () => nilaiKecepatan({sudahKumpul:true, hariTelat:0}) === 100)
+ok('semua yang tepat waktu sama (tak ada balapan)', () =>
+  nilaiKecepatan({sudahKumpul:true, hariTelat:0}) === nilaiKecepatan({sudahKumpul:true, hariTelat:0}))
+ok('belum kumpul = 0', () => nilaiKecepatan({sudahKumpul:false}) === 0)
+ok('telat 1 hari kurangi 20 → 80', () => nilaiKecepatan({sudahKumpul:true, hariTelat:1}) === 80)
+ok('telat beberapa jam dibulatkan 1 hari → 80', () => nilaiKecepatan({sudahKumpul:true, hariTelat:0.3}) === 80)
+ok('telat 3 hari → 40', () => nilaiKecepatan({sudahKumpul:true, hariTelat:3}) === 40)
+ok('telat parah dibatasi → 0', () => nilaiKecepatan({sudahKumpul:true, hariTelat:10}) === 0)
 
 bab('Model baru: nilai sprint gabungan berbobot')
 ok('semua sempurna = 100', () => {
   const r = hitungNilaiSprint({hurufList:['A','A'], intiTotal:2, jumlahBadge:10,
-    kecepatan:{peringkat:1, jumlahKumpul:1, jamTelat:0}})
+    kecepatan:{sudahKumpul:true, hariTelat:0}})
   return r.nilai === 100 ? 'nilai '+r.nilai : 'dapat '+r.nilai
 })
-ok('review saja bagus, tanpa badge/kecepatan', () => {
-  // default 65/20/15; review 100, badge 0, kecepatan 0 → 65
-  const r = hitungNilaiSprint({hurufList:['A'], intiTotal:1, jumlahBadge:0, kecepatan:{peringkat:null}})
+ok('review saja bagus, tanpa badge/ketepatan', () => {
+  // default 65/20/15; review 100, badge 0, ketepatan 0 → 65
+  const r = hitungNilaiSprint({hurufList:['A'], intiTotal:1, jumlahBadge:0, kecepatan:{sudahKumpul:false}})
   return r.nilai === 65 ? 'nilai '+r.nilai : 'dapat '+r.nilai
 })
 ok('bobot bisa diubah', () => {
-  const r = hitungNilaiSprint({hurufList:['A'], intiTotal:1, jumlahBadge:0, kecepatan:{peringkat:null}},
+  const r = hitungNilaiSprint({hurufList:['A'], intiTotal:1, jumlahBadge:0, kecepatan:{sudahKumpul:false}},
     {review:100, badge:0, kecepatan:0})
   return r.nilai === 100
 })
 ok('rincian menyimpan komponen', () => {
   const r = hitungNilaiSprint({hurufList:['B'], intiTotal:1, jumlahBadge:2,
-    kecepatan:{peringkat:1, jumlahKumpul:2, jamTelat:0}})
+    kecepatan:{tanpaTenggat:true}})
   return r.rincian.review === 85 && r.rincian.badge === 20 && r.rincian.kecepatan === 100
 })
 

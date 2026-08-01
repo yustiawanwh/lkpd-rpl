@@ -166,7 +166,8 @@ export async function rekapNilaiPerSprint(penugasanId, tpId) {
   ])
   if (e0) throw e0
 
-  const tenggat = pen?.tenggat ? new Date(pen.tenggat + 'T23:59:59') : null
+  // Tenggat kini timestamptz (tanggal + jam). Bila kosong = tanpa tenggat.
+  const tenggat = pen?.tenggat ? new Date(pen.tenggat) : null
 
   const intiKeSprint = {}       // tugas_id -> sprint_id
   const intiSet = new Set()     // tugas_id inti
@@ -263,21 +264,18 @@ export async function rekapNilaiPerSprint(penugasanId, tpId) {
     .eq('penugasan_id', penugasanId)
   for (const t of (terdaftar ?? [])) pastikan(t.murid_id, t.profil)
 
-  // 5. Peringkat kecepatan per sprint: urutkan murid berdasar waktu serah
-  //    terakhir pada sprint itu (yang lebih awal = peringkat lebih baik).
+  // 5. Ketepatan waktu per sprint: berdasarkan tenggat penugasan (tanggal+jam),
+  //    BUKAN urutan antar murid. Tanpa tenggat = semua tepat waktu.
   for (const s of daftarSprint) {
-    const pesertaSelesai = Object.values(petaMurid)
-      .filter(m => m.perSprint[s.id]?.serahTerakhir)
-      .sort((a, b) => a.perSprint[s.id].serahTerakhir - b.perSprint[s.id].serahTerakhir)
-    const jml = pesertaSelesai.length
-    pesertaSelesai.forEach((m, i) => {
+    for (const m of Object.values(petaMurid)) {
       const ps = m.perSprint[s.id]
-      ps.peringkat = i + 1
-      ps.jumlahKumpul = jml
-      // jam telat dari tenggat penugasan.
-      ps.jamTelat = tenggat && ps.serahTerakhir > tenggat
-        ? (ps.serahTerakhir - tenggat) / 3_600_000 : 0
-    })
+      if (!ps) continue
+      ps.tanpaTenggat = !tenggat
+      ps.sudahKumpul = !!ps.serahTerakhir
+      // Selisih hari telat (pecahan) dari tenggat spesifik.
+      ps.hariTelat = (tenggat && ps.serahTerakhir && ps.serahTerakhir > tenggat)
+        ? (ps.serahTerakhir - tenggat) / 86_400_000 : 0
+    }
   }
 
   return { sprints: daftarSprint, murid: Object.values(petaMurid), tenggat: pen?.tenggat ?? null }

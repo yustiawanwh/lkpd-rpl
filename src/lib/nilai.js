@@ -22,7 +22,8 @@ export const BOBOT_BAWAAN = {
   tantangan: 10,
   poin_per_badge: 10,
   penalti_telat_per_jam: 2,
-  penalti_telat_maks: 40,
+  penalti_telat_per_hari: 20,
+  penalti_telat_maks: 100,
 }
 
 /** Nilai angka (0..100) untuk tiap huruf review. */
@@ -38,15 +39,29 @@ export function nilaiReview(hurufList, intiTotal) {
   return jumlah / total
 }
 
+/**
+ * Skor KETEPATAN WAKTU (menggantikan "kecepatan-balapan" yang bisa dimanipulasi).
+ *
+ * Prinsip adil: tidak ada balapan antar murid. Yang mengumpulkan tepat waktu
+ * (sebelum/pada tenggat) mendapat skor PENUH; yang telat dikenai penalti
+ * sebanding lamanya keterlambatan. Urutan siapa duluan TIDAK lagi memengaruhi
+ * nilai — sehingga menyelesaikan cepat di akhir (indikasi menyalin) tak lagi
+ * memberi keuntungan.
+ */
 export function nilaiKecepatan(p, b = BOBOT_BAWAAN) {
-  if (!p || p.peringkat == null) return 0
-  const n = Math.max(1, p.jumlahKumpul ?? 1)
-  const posisi = Math.min(p.peringkat, n)
-  const skorPeringkat = n === 1 ? 100 : 100 - ((posisi - 1) / (n - 1)) * 40
-  const jamTelat = Math.max(0, p.jamTelat ?? 0)
-  const penalti = Math.min(jamTelat * (b.penalti_telat_per_jam ?? 2),
-                           b.penalti_telat_maks ?? 40)
-  return Math.max(0, skorPeringkat - penalti)
+  if (!p) return 0
+  // Tanpa tenggat: semua dianggap tepat waktu (skor penuh).
+  if (p.tanpaTenggat === true) return 100
+  // Belum mengumpulkan sama sekali: skor 0.
+  if (p.sudahKumpul === false) return 0
+  const hariTelat = Math.max(0, p.hariTelat ?? 0)
+  if (hariTelat <= 0) return 100    // tepat waktu → penuh
+  // Penalti per HARI telat (dibulatkan ke atas: lewat sedikit = 1 hari),
+  // makin lama makin turun, dibatasi penalti maksimal.
+  const hari = Math.ceil(hariTelat)
+  const penalti = Math.min(hari * (b.penalti_telat_per_hari ?? 20),
+                           b.penalti_telat_maks ?? 100)
+  return Math.max(0, 100 - penalti)
 }
 
 export function hitungNilaiSprint(komp, bobot = {}) {

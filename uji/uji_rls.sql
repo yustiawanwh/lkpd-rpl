@@ -161,6 +161,11 @@ begin
   insert into progres_tugas (penugasan_id, murid_id, tugas_id, status)
     values (i.p_budi, i.dewi, i.tugas, 'selesai') returning id into v_id;
   perform catat('Murid bisa membuat progresnya sendiri', v_id is not null);
+  -- Guru menilai tugas ini (memicu badge sesuai aturan baru: badge diberikan
+  -- setelah DINILAI guru, bukan sekadar ditandai selesai).
+  perform masuk_sebagai(i.budi);
+  perform nilai_tugas(v_id, 'A', null);
+  perform masuk_sebagai(i.dewi);
 
   -- Mencoba membuat progres atas nama murid lain
   begin
@@ -253,11 +258,13 @@ begin
     perform catat('Murid tidak bisa memberi badge sendiri', true);
   end;
 
-  -- Mencoba menyetujui pekerjaan sendiri
+  -- Mencoba menyetujui pekerjaan sendiri (harus gagal). Catatan: tugas ini
+  -- sudah dinilai guru, jadi disetujui_oleh sudah terisi oleh GURU. Yang diuji
+  -- di sini: murid tak bisa menjadikan DIRINYA sebagai penyetuju.
   update progres_tugas set disetujui_oleh = i.dewi, disetujui_pada = now()
     where murid_id = i.dewi;
   select count(*) into n from progres_tugas
-    where murid_id = i.dewi and disetujui_oleh is not null;
+    where murid_id = i.dewi and disetujui_oleh = i.dewi;
   perform catat('Murid tidak bisa menyetujui pekerjaannya sendiri', n = 0);
 end $$;
 
@@ -268,6 +275,13 @@ do $$
 declare i record; v_xp int; n int;
 begin
   select * into i from id_uji;
+
+  -- Tugas ini sudah dinilai (terkunci). Alur nyata: guru membuka kunci
+  -- lebih dulu sebelum murid bisa membukanya kembali.
+  perform masuk_sebagai(i.budi);
+  perform buka_kunci_tugas((select id from progres_tugas
+    where murid_id = i.dewi and tugas_id = i.tugas));
+
   perform masuk_sebagai(i.dewi);
 
   update progres_tugas set status = 'dikerjakan'
@@ -294,7 +308,7 @@ end $$;
 --  BAGIAN 6 — BADGE
 -- ============================================================
 do $$
-declare i record; n int; v_xp int;
+declare i record; n int; v_xp int; v_id2 bigint;
 begin
   select * into i from id_uji;
   perform masuk_sebagai(i.dewi);
@@ -302,9 +316,14 @@ begin
   select count(*) into n from perolehan_badge where murid_id = i.dewi;
   perform catat('Badge task_selesai terbit otomatis', n = 1, 'badge: ' || n);
 
-  -- Menyelesaikan seluruh tugas inti sprint 1 → badge sprint_tuntas
+  -- Menyelesaikan seluruh tugas inti sprint 1, DAN dinilai guru → badge
+  -- sprint_tuntas (aturan baru: badge terbit setelah semua inti DINILAI).
   insert into progres_tugas (penugasan_id, murid_id, tugas_id, status)
-    values (i.p_budi, i.dewi, i.tugas2, 'selesai');
+    values (i.p_budi, i.dewi, i.tugas2, 'selesai') returning id into v_id2;
+  -- Guru menilai tugas2.
+  perform masuk_sebagai(i.budi);
+  perform nilai_tugas(v_id2, 'A', null);
+  perform masuk_sebagai(i.dewi);
 
   select count(*) into n from perolehan_badge where murid_id = i.dewi;
   perform catat('Badge sprint_tuntas terbit setelah semua inti selesai',
