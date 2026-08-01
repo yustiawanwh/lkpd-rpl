@@ -107,7 +107,7 @@ const NILAI_BAWAAN = {
   tantangan: 10,     // porsi tantangan: batas atas nilai sprint tanpa tantangan = 100 - ini
   huruf: { A: 100, B: 85, C: 75, D: 60, E: 40 },
   poin_per_badge: 10, penalti_telat_per_hari: 20, penalti_telat_maks: 100,
-  kkm: 75, ambang_hijau: 85,
+  kkm: 75, ambang_hijau: 85, penalti_susulan: 10,
 }
 
 function bobotLengkap(b) {
@@ -169,7 +169,8 @@ function panelNilai(bobot, adminSaja, wadah) {
         el('div', {},
           el('span', { class: 'titik-warna kuning' }), ` Lulus: ${b.kkm} – ${b.ambang_hijau - 1}`),
         el('div', {},
-          el('span', { class: 'titik-warna hijau' }), ` Sangat baik: ≥ ${b.ambang_hijau}`)),
+          el('span', { class: 'titik-warna hijau' }), ` Sangat baik: ≥ ${b.ambang_hijau}`),
+        el('div', { gaya: { marginTop: '4px' } }, `Pengurangan poin susulan: −${b.penalti_susulan} dari nilai akhir`)),
 
       !adminSaja && el('p', { gaya: { marginTop: '12px', fontSize: '12.5px', color: 'var(--tinta-lembut)' } },
         'Hanya admin yang bisa mengubah pengaturan nilai.'),
@@ -198,6 +199,7 @@ function dialogNilai(b, wadah) {
   const fKkm = el('input', { type: 'number', min: '0', max: '100', value: String(b.kkm) })
   const fAmbangHijau = el('input', { type: 'number', min: '0', max: '100', value: String(b.ambang_hijau) })
   const fTantangan = el('input', { type: 'number', min: '0', max: '100', value: String(b.tantangan) })
+  const fSusulan = el('input', { type: 'number', min: '0', max: '100', value: String(b.penalti_susulan) })
 
   const totalTanda = el('span', { class: 'mono', gaya: { fontWeight: '700' } })
   function perbaruiTotal() {
@@ -221,6 +223,7 @@ function dialogNilai(b, wadah) {
       kkm: +fKkm.value || 0,
       ambang_hijau: +fAmbangHijau.value || 0,
       tantangan: +fTantangan.value || 0,
+      penalti_susulan: +fSusulan.value || 0,
     }
     simpan.disabled = true; isi(galat)
     try {
@@ -264,6 +267,8 @@ function dialogNilai(b, wadah) {
         el('div', { class: 'ruas' }, el('label', {}, 'KKM (batas lulus)'), fKkm),
         el('div', { class: 'ruas' }, el('label', {}, 'Ambang hijau'), fAmbangHijau),
         el('div', { class: 'ruas' }, el('label', {}, 'Porsi tantangan (%)'), fTantangan)),
+      el('div', { class: 'kisi-2', gaya: { marginTop: '8px' } },
+        el('div', { class: 'ruas' }, el('label', {}, 'Pengurangan poin susulan'), fSusulan)),
       el('p', { gaya: { margin: '4px 0 0', fontSize: '12px', color: 'var(--tinta-lembut)', lineHeight: '1.5' } },
         'Merah bila nilai di bawah KKM, kuning-kehijauan bila lulus, hijau bila ≥ ambang. ' +
         'Porsi tantangan: nilai sprint dibatasi (100 − porsi) bila tantangan belum selesai.'),

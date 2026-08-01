@@ -743,6 +743,13 @@ async function tampilKemajuan(wadah) {
     }
     nilaiTotal = Math.round(jml / rekapSprint.sprints.length)
   }
+  // Pengurangan poin bila murid ini punya kelonggaran susulan pada penugasan ini.
+  try {
+    const { count } = await sb.from('kelonggaran_sprint')
+      .select('id', { count: 'exact', head: true })
+      .eq('penugasan_id', a.id).eq('murid_id', keadaan.profil.id).eq('susulan', true)
+    if (count > 0) nilaiTotal = Math.max(0, nilaiTotal - (bobot.penalti_susulan ?? 0))
+  } catch (_) {}
   // Warna dinamis: merah < KKM, kuning-kehijauan lulus, hijau ≥ ambang.
   const warnaNilai = nilaiTotal < KKM ? 'merah'
     : nilaiTotal >= AMBANG_HIJAU ? 'hijau' : 'kuning'

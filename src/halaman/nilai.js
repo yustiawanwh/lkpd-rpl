@@ -18,7 +18,7 @@ export async function halamanNilai(wadah, penugasanId) {
   isi(wadah, rangkaMuat('220px'))
 
   // Muat info penugasan (untuk judul & tpId), lalu rekapnya.
-  let pen, rekap, rekapSprint
+  let pen, rekap, rekapSprint, muridSusulan = new Set()
   try {
     const { data, error } = await sb.from('penugasan')
       .select('id, kelas_id, kelas(nama), tujuan_pembelajaran(id, kode, judul)')
@@ -27,6 +27,10 @@ export async function halamanNilai(wadah, penugasanId) {
     pen = data
     rekap = await rekapNilai(penugasanId, pen.tujuan_pembelajaran.id)
     rekapSprint = await rekapNilaiPerSprint(penugasanId, pen.tujuan_pembelajaran.id)
+    // Murid yang mendapat kelonggaran susulan (untuk pengurangan poin).
+    const { data: kel } = await sb.from('kelonggaran_sprint')
+      .select('murid_id').eq('penugasan_id', penugasanId).eq('susulan', true)
+    muridSusulan = new Set((kel ?? []).map(k => k.murid_id))
     // Muat bobot dari pengaturan (bila ada).
     const { data: setelan } = await sb.from('pengaturan').select('nilai').eq('kunci', 'bobot_nilai').maybeSingle()
     if (setelan?.nilai) Object.assign(BOBOT_BAWAAN, setelan.nilai)
@@ -58,11 +62,15 @@ export async function halamanNilai(wadah, penugasanId) {
           }, bobot)
           jml += h.nilai; n++
         }
-        const nilai = n ? Math.round(jml / n) : 0
+        const nilaiKotor = n ? Math.round(jml / n) : 0
+        // Pengurangan poin bila murid ini mengerjakan lewat kelonggaran (susulan).
+        const susulan = muridSusulan.has(m.murid_id)
+        const potongan = susulan ? (bobot.penalti_susulan ?? 0) : 0
+        const nilai = Math.max(0, nilaiKotor - potongan)
         // Ringkasan untuk kolom tabel & ekspor (agar tampilan tetap lengkap).
         const intiSelesai = m.tugas_selesai ?? 0
         const tantanganSelesai = m.tantangan_selesai ?? 0
-        return { ...m, nilai, predikat: predikatUntuk(nilai),
+        return { ...m, nilai, nilaiKotor, susulan, potongan, predikat: predikatUntuk(nilai),
                  tuntas: rekap.intiTotal > 0 && intiSelesai === rekap.intiTotal,
                  rincian: { intiSelesai, intiTotal: rekap.intiTotal,
                             tantangan: tantanganSelesai, badge: m.jumlah_badge ?? 0 } }
@@ -130,7 +138,10 @@ export async function halamanNilai(wadah, penugasanId) {
                   el('th', { class: 'tengah' }, 'Tuntas'))),
                 el('tbody', {}, ...baris.map(r => el('tr', {},
                   el('td', { class: 'mono tengah' }, r.profil?.no_absen ?? '—'),
-                  el('td', { class: 'utama' }, r.profil?.nama ?? '—'),
+                  el('td', { class: 'utama' }, r.profil?.nama ?? '—',
+                    r.susulan ? el('span', { class: 'lencana-susulan',
+                      title: `Susulan — dikurangi ${r.potongan} poin (nilai asli ${r.nilaiKotor})` },
+                      `susulan −${r.potongan}`) : null),
                   el('td', { class: 'mono tengah' }, `${r.rincian.intiSelesai}/${r.rincian.intiTotal}`),
                   el('td', { class: 'angka' }, String(r.rincian.tantangan)),
                   el('td', { class: 'angka' }, String(r.rincian.badge)),
