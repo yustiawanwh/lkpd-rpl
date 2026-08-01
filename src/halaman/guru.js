@@ -771,7 +771,7 @@ async function antreanReview(wadah, penugasanId) {
         el('button', { class: 'tbl tbl-kecil tbl-hantu', gaya: { padding: '2px 0', marginBottom: '4px' },
                        onClick: () => pergiKe(`kelas/${pen.kelas_id}`) }, '← Kembali ke kelas'),
         el('h1', {}, 'Menunggu review'),
-        el('p', {}, `${pen.kelas?.nama} · ${pen.tujuan_pembelajaran?.kode}` +
+        el('p', { id: 'review-hitung' }, `${pen.kelas?.nama} · ${pen.tujuan_pembelajaran?.kode}` +
                     (data.length ? ` — ${data.length} tugas dari ${kelompok.length} murid` : '')),
       ),
     ),
@@ -1229,9 +1229,25 @@ function kartuReview(p, penugasanId, wadah) {
   function lepasKartu() {
     const grup = kartu.closest('.grup-murid')
     kartu.remove()
-    if (grup && !grup.querySelector('.panel')) grup.remove()
-    if (!wadah.querySelector('.panel')) {
-      isi(wadah.querySelector('.tumpuk-murid') || wadah,
+    if (grup && !grup.querySelector('.panel')) {
+      grup.remove()
+    } else if (grup) {
+      // Perbarui hitungan "N tugas menunggu" pada grup murid ini.
+      const sisa = grup.querySelectorAll('.panel').length
+      const ket = grup.querySelector('.grup-murid-kepala div div:last-child')
+      if (ket) ket.textContent = ket.textContent.replace(/\d+ tugas menunggu/, `${sisa} tugas menunggu`)
+    }
+    // Perbarui hitungan di kepala halaman berdasarkan DOM terkini.
+    const kartuSisa = wadah.querySelectorAll('.tumpuk-murid .panel').length
+    const muridSisa = wadah.querySelectorAll('.grup-murid').length
+    const kepala = wadah.querySelector('#review-hitung')
+    if (kepala) {
+      kepala.textContent = kepala.textContent.replace(/ — \d+ tugas dari \d+ murid/, '')
+        + (kartuSisa ? ` — ${kartuSisa} tugas dari ${muridSisa} murid` : '')
+    }
+    if (!kartuSisa) {
+      const bungkus = wadah.querySelector('.tumpuk-murid')
+      if (bungkus) isi(bungkus,
         el('div', { class: 'kosong', gaya: { padding: '24px' } },
           el('h3', {}, 'Semua sudah diperiksa'),
           el('p', {}, 'Tidak ada lagi tugas yang menunggu review.')))
