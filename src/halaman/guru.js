@@ -318,6 +318,8 @@ async function detilKelas(wadah, kelasId) {
               el('button', { class: 'tbl tbl-kecil',
                              onClick: () => bukaTutup(p) }, p.dibuka ? 'Tutup' : 'Buka'),
               el('button', { class: 'tbl tbl-kecil',
+                             onClick: () => dialogUbahTenggat(p, kelasId) }, 'Ubah tenggat'),
+              el('button', { class: 'tbl tbl-kecil',
                              onClick: () => pergiKe(`nilai/${p.id}`) }, 'Review'),
               el('button', { class: 'tbl tbl-kecil',
                              onClick: () => pergiKe(`arsip/${p.id}`) }, 'Sudah Dinilai'),
@@ -389,6 +391,47 @@ async function detilKelas(wadah, kelasId) {
       roti(p.dibuka ? 'Tugas ditutup' : 'Tugas dibuka')
       detilKelas(wadah, kelasId)
     } catch (err) { roti(pesanGalat(err), '⚠') }
+  }
+
+  // Ubah tanggal mulai & tenggat (tanggal+jam) penugasan yang sudah dibuat.
+  function dialogUbahTenggat(p, kelasId) {
+    // Ubah ISO → nilai datetime-local (YYYY-MM-DDTHH:mm) di zona waktu lokal.
+    const keLokal = (iso) => {
+      if (!iso) return ''
+      const d = new Date(iso)
+      const p2 = (n) => String(n).padStart(2, '0')
+      return `${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())}T${p2(d.getHours())}:${p2(d.getMinutes())}`
+    }
+    const fMulai = el('input', { type: 'date', value: p.mulai ? String(p.mulai).slice(0, 10) : '' })
+    const fTenggat = el('input', { type: 'datetime-local', value: keLokal(p.tenggat) })
+    const galat = el('div')
+    let tutup
+
+    async function simpan() {
+      try {
+        const { error } = await sb.from('penugasan').update({
+          mulai: fMulai.value || null,
+          tenggat: fTenggat.value ? new Date(fTenggat.value).toISOString() : null,
+        }).eq('id', p.id)
+        if (error) throw error
+        tutup(); roti('Tenggat diperbarui'); detilKelas(wadah, kelasId)
+      } catch (err) { isi(galat, el('div', { class: 'pesan pesan-galat' }, pesanGalat(err))) }
+    }
+
+    tutup = dialog({
+      judul: `Ubah tenggat — ${p.tujuan_pembelajaran?.kode ?? ''}`,
+      badan: el('div', {}, galat,
+        el('div', { class: 'kisi-2' },
+          el('div', { class: 'ruas' }, el('label', {}, 'Mulai'), fMulai),
+          el('div', { class: 'ruas' }, el('label', {}, 'Tenggat'), fTenggat)),
+        el('p', { gaya: { fontSize: '12px', color: 'var(--tinta-lembut)', marginTop: '8px' } },
+          'Kosongkan tenggat bila tugas tanpa batas waktu — semua murid dianggap tepat waktu.')),
+      kaki: [
+        el('button', { class: 'tbl', onClick: () => tutup() }, 'Batal'),
+        el('button', { class: 'tbl tbl-utama', gaya: { marginLeft: 'auto' }, onClick: simpan }, 'Simpan'),
+      ],
+      lebar: '440px',
+    })
   }
 
   async function hapusPenugasan(p) {
