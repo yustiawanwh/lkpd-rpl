@@ -737,7 +737,7 @@ async function tampilKemajuan(wadah) {
         jumlahBadge: ps.badge ?? 0,
         tantanganTotal: s.tantanganTotal ?? 0,
         tantanganDinilai: ps.tantanganDinilai ?? 0,
-        kecepatan: { tanpaTenggat: ps.tanpaTenggat === true, sudahKumpul: ps.sudahKumpul === true, hariTelat: ps.hariTelat ?? 0 },
+        kecepatan: { sudahKumpul: ps.sudahKumpul === true, jamDurasi: ps.jamDurasi },
       }, bobot)
       jml += hasil.nilai
     }

@@ -24,6 +24,9 @@ export const BOBOT_BAWAAN = {
   penalti_telat_per_jam: 2,
   penalti_telat_per_hari: 20,
   penalti_telat_maks: 100,
+  durasi_target_jam: 24,
+  penalti_lambat: 50,
+  penalti_lambat_maks: 100,
 }
 
 /** Nilai angka (0..100) untuk tiap huruf review. */
@@ -50,18 +53,18 @@ export function nilaiReview(hurufList, intiTotal) {
  */
 export function nilaiKecepatan(p, b = BOBOT_BAWAAN) {
   if (!p) return 0
-  // Tanpa tenggat: semua dianggap tepat waktu (skor penuh).
-  if (p.tanpaTenggat === true) return 100
-  // Belum mengumpulkan sama sekali: skor 0.
+  // Belum mengumpulkan: skor 0.
   if (p.sudahKumpul === false) return 0
-  const hariTelat = Math.max(0, p.hariTelat ?? 0)
-  if (hariTelat <= 0) return 100    // tepat waktu → penuh
-  // Penalti per HARI telat (dibulatkan ke atas: lewat sedikit = 1 hari),
-  // makin lama makin turun, dibatasi penalti maksimal.
-  const hari = Math.ceil(hariTelat)
-  const penalti = Math.min(hari * (b.penalti_telat_per_hari ?? 20),
-                           b.penalti_telat_maks ?? 100)
-  return Math.max(0, 100 - penalti)
+  // Durasi pengerjaan (jam) dari tanggal mulai penugasan sampai serah.
+  // Bila tanggal mulai tak diketahui, tak bisa dinilai adil → skor penuh.
+  if (p.jamDurasi == null) return 100
+  const target = Math.max(1, b.durasi_target_jam ?? 24)   // jam target (bawaan 1 hari)
+  const durasi = Math.max(0, p.jamDurasi)
+  if (durasi <= target) return 100        // selesai dalam target → penuh
+  // Lebih lama dari target: turun bertahap per "kelipatan target" di atasnya.
+  const kelebihan = (durasi - target) / target      // 1 = dua kali target
+  const penalti = Math.min(kelebihan * (b.penalti_lambat ?? 50), b.penalti_lambat_maks ?? 100)
+  return Math.max(0, Math.round(100 - penalti))
 }
 
 export function hitungNilaiSprint(komp, bobot = {}) {

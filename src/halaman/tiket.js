@@ -105,6 +105,7 @@ export function dialogTiket(tugas, saatBerubah) {
 
   // Tugas terkunci: seluruh input (timer, catatan, bukti) dinonaktifkan.
   const terkunci = pr.terkunci === true
+  let sprintLewat = false       // true bila sprint tugas ini sudah lewat tenggat
   let tabelIsiApi = null       // API tabel isian (untuk kunci mengikuti timer)
   let petunjukKerja = null     // banner petunjuk "tekan Mulai dulu"
 
@@ -132,7 +133,7 @@ export function dialogTiket(tugas, saatBerubah) {
   // Poin 4: isian hanya boleh diisi saat timer BERJALAN untuk tugas ini
   // (dan tugas tidak terkunci nilai/guru). Saat belum start atau dijeda,
   // isian dinonaktifkan agar murid tidak mengisi tanpa "bekerja".
-  const sedangKerja = () => timerAktif() === tugas.id && !terkunci
+  const sedangKerja = () => timerAktif() === tugas.id && !terkunci && !sprintLewat
   function perbaruiKunciIsi() {
     const boleh = sedangKerja()
     if (catatan) catatan.disabled = !boleh
@@ -153,6 +154,12 @@ export function dialogTiket(tugas, saatBerubah) {
 
   async function toggleTimer() {
     if (terkunci) return   // tugas terkunci: timer tidak bisa dijalankan
+    // Sprint sudah lewat tenggat: hanya boleh menghentikan bila sedang jalan,
+    // tapi tidak boleh MEMULAI lagi.
+    if (sprintLewat && timerAktif() !== tugas.id) {
+      roti('Tenggat sprint sudah lewat — tugas ini tidak bisa dikerjakan lagi', '🔒')
+      return
+    }
     if (timerAktif() === tugas.id) {
       detik = await hentikanTimer() ?? detik
       perbaruiWaktu(true)
@@ -493,6 +500,29 @@ export function dialogTiket(tugas, saatBerubah) {
       return true
     },
   })
+
+  // Cek apakah sprint tugas ini sudah lewat tenggat (kunci server).
+  ;(async () => {
+    if (terkunci) return
+    try {
+      const { data } = await sb.rpc('tugas_sprint_terkunci', {
+        p_penugasan: keadaan.penugasan.id, p_tugas: tugas.id,
+      })
+      if (data === true) {
+        sprintLewat = true
+        tblTimer.disabled = true
+        tblTimer.textContent = '🔒 Tenggat lewat'
+        if (petunjukKerja) {
+          petunjukKerja.className = 'pesan pesan-galat'
+          petunjukKerja.style.display = ''
+          petunjukKerja.textContent = '🔒 Tenggat sprint sudah lewat. Tugas ini tidak bisa dikerjakan lagi. ' +
+            'Hubungi gurumu bila perlu susulan.'
+        }
+        // Kunci juga isian tabel bila sudah termuat.
+        if (tabelIsiApi?.setBacaSaja) tabelIsiApi.setBacaSaja(true)
+      }
+    } catch (_) {}
+  })()
 
   // Muat semua bukti yang sudah ada
   ;(async () => {

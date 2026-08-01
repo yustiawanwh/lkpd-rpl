@@ -58,7 +58,7 @@ export async function halamanNilai(wadah, penugasanId) {
             jumlahBadge: ps.badge ?? 0,
             tantanganTotal: s.tantanganTotal ?? 0,
             tantanganDinilai: ps.tantanganDinilai ?? 0,
-            kecepatan: { tanpaTenggat: ps.tanpaTenggat === true, sudahKumpul: ps.sudahKumpul === true, hariTelat: ps.hariTelat ?? 0 },
+            kecepatan: { sudahKumpul: ps.sudahKumpul === true, jamDurasi: ps.jamDurasi },
           }, bobot)
           jml += h.nilai; n++
         }
@@ -124,7 +124,7 @@ export async function halamanNilai(wadah, penugasanId) {
       ),
       el('div', { class: 'pesan pesan-info', gaya: { marginBottom: '14px' } },
         `Nilai total adalah rata-rata nilai seluruh sprint. Tiap sprint menggabungkan review, badge, ` +
-        `dan ketepatan waktu, lalu dibatasi porsi tantangan (${bobot.tantangan ?? 10}%): nilai penuh hanya ` +
+        `dan kecepatan pengerjaan, lalu dibatasi porsi tantangan (${bobot.tantangan ?? 10}%): nilai penuh hanya ` +
         `untuk yang menyelesaikan semua tugas termasuk tantangan. Tuntas berarti seluruh tugas inti selesai.`),
       baris.length
         ? el('div', { class: 'panel' },
@@ -173,7 +173,7 @@ export async function halamanNilai(wadah, penugasanId) {
             jumlahBadge: ps.badge ?? 0,
             tantanganTotal: s.tantanganTotal ?? 0,
             tantanganDinilai: ps.tantanganDinilai ?? 0,
-            kecepatan: { tanpaTenggat: ps.tanpaTenggat === true, sudahKumpul: ps.sudahKumpul === true, hariTelat: ps.hariTelat ?? 0 },
+            kecepatan: { sudahKumpul: ps.sudahKumpul === true, jamDurasi: ps.jamDurasi },
           }, bobot)
           nilaiSprint[s.id] = {
             nilai: hasil.nilai, rincian: hasil.rincian,
@@ -195,7 +195,7 @@ export async function halamanNilai(wadah, penugasanId) {
     return el('div', {},
       el('div', { class: 'pesan pesan-info', gaya: { marginBottom: '14px' } },
         'Nilai tiap sprint adalah gabungan berbobot: nilai review guru (A–E), badge, ' +
-        'dan ketepatan waktu pengumpulan. Nilai baru muncul setelah guru menilai tugas — ' +
+        'dan kecepatan pengerjaan (durasi dari tanggal mulai). Nilai baru muncul setelah guru menilai tugas — ' +
         'sebelum dinilai, nilai sprint masih 0. Arahkan kursor ke angka untuk melihat rinciannya.'),
       baris.length && sprints.length
         ? el('div', { class: 'panel' },
@@ -219,7 +219,7 @@ export async function halamanNilai(wadah, penugasanId) {
                         ? ` · tantangan ${t.dinilai}/${t.total} (batas ${t.persenBatas}%)`
                         : ''
                       const info = `${v.dinilai}/${v.total} inti dinilai · ` +
-                        `review ${rc.review ?? 0}, badge ${rc.badge ?? 0}, ketepatan ${rc.kecepatan ?? 0}` +
+                        `review ${rc.review ?? 0}, badge ${rc.badge ?? 0}, kecepatan ${rc.kecepatan ?? 0}` +
                         infoTantangan
                       return el('td', { class: 'angka',
                         gaya: { color: warnaNilai(v.nilai) } },

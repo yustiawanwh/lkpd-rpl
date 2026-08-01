@@ -162,12 +162,13 @@ export async function rekapNilaiPerSprint(penugasanId, tpId) {
   const [{ data: sprints, error: e0 }, { data: pen }] = await Promise.all([
     sb.from('sprint').select('id, nomor, nama, tugas(id, jenis)')
       .eq('tujuan_pembelajaran_id', tpId).order('nomor'),
-    sb.from('penugasan').select('tenggat').eq('id', penugasanId).single(),
+    sb.from('penugasan').select('tenggat, mulai').eq('id', penugasanId).single(),
   ])
   if (e0) throw e0
 
   // Tenggat kini timestamptz (tanggal + jam). Bila kosong = tanpa tenggat.
   const tenggat = pen?.tenggat ? new Date(pen.tenggat) : null
+  const mulai = pen?.mulai ? new Date(pen.mulai) : null
 
   const intiKeSprint = {}       // tugas_id -> sprint_id
   const intiSet = new Set()     // tugas_id inti
@@ -270,11 +271,11 @@ export async function rekapNilaiPerSprint(penugasanId, tpId) {
     for (const m of Object.values(petaMurid)) {
       const ps = m.perSprint[s.id]
       if (!ps) continue
-      ps.tanpaTenggat = !tenggat
       ps.sudahKumpul = !!ps.serahTerakhir
-      // Selisih hari telat (pecahan) dari tenggat spesifik.
-      ps.hariTelat = (tenggat && ps.serahTerakhir && ps.serahTerakhir > tenggat)
-        ? (ps.serahTerakhir - tenggat) / 86_400_000 : 0
+      // Durasi (jam) dari tanggal MULAI penugasan (patokan sama untuk semua)
+      // sampai waktu serah terakhir murid. Dipakai skor kecepatan (durasi target).
+      ps.jamDurasi = (mulai && ps.serahTerakhir)
+        ? Math.max(0, (ps.serahTerakhir - mulai) / 3_600_000) : null
     }
   }
 

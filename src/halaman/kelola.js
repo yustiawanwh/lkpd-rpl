@@ -106,7 +106,7 @@ const NILAI_BAWAAN = {
   review: 65, badge: 20, kecepatan: 15,
   tantangan: 10,     // porsi tantangan: batas atas nilai sprint tanpa tantangan = 100 - ini
   huruf: { A: 100, B: 85, C: 75, D: 60, E: 40 },
-  poin_per_badge: 10, penalti_telat_per_hari: 20, penalti_telat_maks: 100,
+  poin_per_badge: 10, durasi_target_jam: 24, penalti_lambat: 50, penalti_lambat_maks: 100,
   kkm: 75, ambang_hijau: 85, penalti_susulan: 10,
 }
 
@@ -129,12 +129,12 @@ function panelNilai(bobot, adminSaja, wadah) {
     el('div', { class: 'panel-isi' },
       el('p', { gaya: { margin: '0 0 14px', fontSize: '13px', color: 'var(--tinta-lembut)', lineHeight: '1.55' } },
         'Nilai akhir tiap sprint/LKPD adalah gabungan berbobot dari review guru, badge, ' +
-        'dan ketepatan waktu pengumpulan (maksimal 100). Berlaku untuk semua kelas.'),
+        'dan kecepatan pengerjaan / durasi (maksimal 100). Berlaku untuk semua kelas.'),
 
       el('div', { class: 'kisi-nilai' },
         kotakNilai('Bobot Review', `${b.review}%`, 'dari nilai akhir'),
         kotakNilai('Bobot Badge', `${b.badge}%`, 'dari nilai akhir'),
-        kotakNilai('Bobot Ketepatan Waktu', `${b.kecepatan}%`, 'dari nilai akhir'),
+        kotakNilai('Bobot Kecepatan', `${b.kecepatan}%`, 'dari nilai akhir'),
       ),
       totalBobot !== 100 && el('div', { class: 'pesan pesan-info', gaya: { marginTop: '10px' } },
         `Total bobot saat ini ${totalBobot}% (bukan 100%). Sistem tetap menormalkannya, ` +
@@ -147,11 +147,11 @@ function panelNilai(bobot, adminSaja, wadah) {
             el('div', { class: 'huruf-besar' }, h),
             el('div', { class: 'huruf-angka' }, String(b.huruf[h]))))),
 
-      el('div', { class: 'bagian-judul', gaya: { marginTop: '16px' } }, 'Parameter ketepatan waktu'),
+      el('div', { class: 'bagian-judul', gaya: { marginTop: '16px' } }, 'Parameter kecepatan (durasi)'),
       el('div', { gaya: { fontSize: '13px', color: 'var(--tinta)', lineHeight: '1.7' } },
         el('div', {}, `Tiap badge menyumbang: ${b.poin_per_badge} poin`),
-        el('div', {}, `Penalti keterlambatan: ${b.penalti_telat_per_hari} poin/hari`),
-        el('div', {}, `Batas maksimal penalti: ${b.penalti_telat_maks} poin`)),
+        el('div', {}, `Durasi target: ${b.durasi_target_jam} jam (selesai dalam ini = 100)`),
+        el('div', {}, `Penalti kelambatan: ${b.penalti_lambat} poin per kelipatan target`)),
 
       el('div', { class: 'bagian-judul', gaya: { marginTop: '16px' } }, 'Porsi tugas tantangan'),
       el('div', { gaya: { fontSize: '13px', color: 'var(--tinta)', lineHeight: '1.7' } },
@@ -194,8 +194,8 @@ function dialogNilai(b, wadah) {
     fHuruf[h] = el('input', { type: 'number', min: '0', max: '100', value: String(b.huruf[h]) })
   }
   const fBadgePoin = el('input', { type: 'number', min: '0', max: '100', value: String(b.poin_per_badge) })
-  const fPenaltiHari = el('input', { type: 'number', min: '0', max: '100', value: String(b.penalti_telat_per_hari) })
-  const fPenaltiMaks = el('input', { type: 'number', min: '0', max: '100', value: String(b.penalti_telat_maks) })
+  const fDurasiTarget = el('input', { type: 'number', min: '1', max: '999', value: String(b.durasi_target_jam) })
+  const fPenaltiLambat = el('input', { type: 'number', min: '0', max: '100', value: String(b.penalti_lambat) })
   const fKkm = el('input', { type: 'number', min: '0', max: '100', value: String(b.kkm) })
   const fAmbangHijau = el('input', { type: 'number', min: '0', max: '100', value: String(b.ambang_hijau) })
   const fTantangan = el('input', { type: 'number', min: '0', max: '100', value: String(b.tantangan) })
@@ -218,8 +218,9 @@ function dialogNilai(b, wadah) {
       review: +fReview.value || 0, badge: +fBadge.value || 0, kecepatan: +fKecepatan.value || 0,
       huruf: Object.fromEntries(['A','B','C','D','E'].map(h => [h, +fHuruf[h].value || 0])),
       poin_per_badge: +fBadgePoin.value || 0,
-      penalti_telat_per_hari: +fPenaltiHari.value || 0,
-      penalti_telat_maks: +fPenaltiMaks.value || 0,
+      durasi_target_jam: +fDurasiTarget.value || 24,
+      penalti_lambat: +fPenaltiLambat.value || 0,
+      penalti_lambat_maks: 100,
       kkm: +fKkm.value || 0,
       ambang_hijau: +fAmbangHijau.value || 0,
       tantangan: +fTantangan.value || 0,
@@ -250,17 +251,17 @@ function dialogNilai(b, wadah) {
       el('div', { class: 'kisi-3' },
         el('div', { class: 'ruas' }, el('label', {}, 'Review (%)'), fReview),
         el('div', { class: 'ruas' }, el('label', {}, 'Badge (%)'), fBadge),
-        el('div', { class: 'ruas' }, el('label', {}, 'Ketepatan waktu (%)'), fKecepatan)),
+        el('div', { class: 'ruas' }, el('label', {}, 'Kecepatan (%)'), fKecepatan)),
       el('div', { gaya: { fontSize: '13px', marginTop: '4px' } }, 'Total: ', totalTanda),
 
       el('div', { class: 'bagian-judul', gaya: { marginTop: '14px' } }, 'Konversi nilai huruf (0–100)'),
       ruasHuruf,
 
-      el('div', { class: 'bagian-judul', gaya: { marginTop: '14px' } }, 'Parameter ketepatan waktu'),
+      el('div', { class: 'bagian-judul', gaya: { marginTop: '14px' } }, 'Parameter kecepatan (durasi)'),
       el('div', { class: 'kisi-3' },
         el('div', { class: 'ruas' }, el('label', {}, 'Poin/badge'), fBadgePoin),
-        el('div', { class: 'ruas' }, el('label', {}, 'Penalti/hari telat'), fPenaltiHari),
-        el('div', { class: 'ruas' }, el('label', {}, 'Maks penalti'), fPenaltiMaks)),
+        el('div', { class: 'ruas' }, el('label', {}, 'Durasi target (jam)'), fDurasiTarget),
+        el('div', { class: 'ruas' }, el('label', {}, 'Penalti/kelipatan'), fPenaltiLambat)),
 
       el('div', { class: 'bagian-judul', gaya: { marginTop: '14px' } }, 'KKM & warna predikat'),
       el('div', { class: 'kisi-3' },
