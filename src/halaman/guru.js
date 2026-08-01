@@ -320,6 +320,8 @@ async function detilKelas(wadah, kelasId) {
               el('button', { class: 'tbl tbl-kecil',
                              onClick: () => dialogUbahTenggat(p, kelasId) }, 'Ubah tenggat'),
               el('button', { class: 'tbl tbl-kecil',
+                             onClick: () => dialogSusulan(p, kelasId) }, 'Susulan'),
+              el('button', { class: 'tbl tbl-kecil',
                              onClick: () => pergiKe(`nilai/${p.id}`) }, 'Review'),
               el('button', { class: 'tbl tbl-kecil',
                              onClick: () => pergiKe(`arsip/${p.id}`) }, 'Sudah Dinilai'),
@@ -394,7 +396,7 @@ async function detilKelas(wadah, kelasId) {
   }
 
   // Ubah tanggal mulai & tenggat (tanggal+jam) penugasan yang sudah dibuat.
-  function dialogUbahTenggat(p, kelasId) {
+  async function dialogUbahTenggat(p, kelasId) {
     // Ubah ISO → nilai datetime-local (YYYY-MM-DDTHH:mm) di zona waktu lokal.
     const keLokal = (iso) => {
       if (!iso) return ''
@@ -402,16 +404,43 @@ async function detilKelas(wadah, kelasId) {
       const p2 = (n) => String(n).padStart(2, '0')
       return `${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())}T${p2(d.getHours())}:${p2(d.getMinutes())}`
     }
+    // Muat daftar sprint TP ini + tenggat sprint yang sudah tersimpan.
+    let sprints = [], tenggatSprint = {}
+    try {
+      const [{ data: s }, { data: pen }] = await Promise.all([
+        sb.from('sprint').select('id, nomor, nama')
+          .eq('tujuan_pembelajaran_id', p.tujuan_pembelajaran?.id).order('nomor'),
+        sb.from('penugasan').select('tenggat_sprint').eq('id', p.id).single(),
+      ])
+      sprints = s ?? []
+      tenggatSprint = pen?.tenggat_sprint ?? {}
+    } catch (_) {}
+
     const fMulai = el('input', { type: 'date', value: p.mulai ? String(p.mulai).slice(0, 10) : '' })
     const fTenggat = el('input', { type: 'datetime-local', value: keLokal(p.tenggat) })
+    // Satu input tenggat per sprint.
+    const fSprint = {}
+    const barisSprint = sprints.map(s => {
+      const inp = el('input', { type: 'datetime-local', value: keLokal(tenggatSprint[s.id]) })
+      fSprint[s.id] = inp
+      return el('div', { class: 'ruas' },
+        el('label', {}, `Sprint ${s.nomor}${s.nama ? ' — ' + s.nama : ''}`), inp)
+    })
     const galat = el('div')
     let tutup
 
     async function simpan() {
       try {
+        // Rakit tenggat_sprint hanya untuk sprint yang diisi.
+        const ts = {}
+        for (const s of sprints) {
+          const v = fSprint[s.id]?.value
+          if (v) ts[s.id] = new Date(v).toISOString()
+        }
         const { error } = await sb.from('penugasan').update({
           mulai: fMulai.value || null,
           tenggat: fTenggat.value ? new Date(fTenggat.value).toISOString() : null,
+          tenggat_sprint: ts,
         }).eq('id', p.id)
         if (error) throw error
         tutup(); roti('Tenggat diperbarui'); detilKelas(wadah, kelasId)
@@ -423,14 +452,124 @@ async function detilKelas(wadah, kelasId) {
       badan: el('div', {}, galat,
         el('div', { class: 'kisi-2' },
           el('div', { class: 'ruas' }, el('label', {}, 'Mulai'), fMulai),
-          el('div', { class: 'ruas' }, el('label', {}, 'Tenggat'), fTenggat)),
-        el('p', { gaya: { fontSize: '12px', color: 'var(--tinta-lembut)', marginTop: '8px' } },
-          'Kosongkan tenggat bila tugas tanpa batas waktu — semua murid dianggap tepat waktu.')),
+          el('div', { class: 'ruas' }, el('label', {}, 'Tenggat keseluruhan'), fTenggat)),
+        el('p', { gaya: { fontSize: '12px', color: 'var(--tinta-lembut)', margin: '8px 0' } },
+          'Tenggat keseluruhan dipakai untuk skor ketepatan waktu. Kosongkan bila tanpa batas.'),
+        sprints.length ? el('div', {},
+          el('div', { class: 'bagian-judul', gaya: { marginTop: '10px' } }, 'Tenggat per sprint (kunci otomatis)'),
+          el('p', { gaya: { fontSize: '12px', color: 'var(--tinta-lembut)', margin: '0 0 8px' } },
+            'Setelah tenggat sprint lewat, tugas sprint itu TERKUNCI — murid tak bisa mengisi lagi. ' +
+            'Kosongkan bila sprint tanpa batas. Untuk murid susulan, gunakan tombol “Susulan”.'),
+          ...barisSprint) : null),
       kaki: [
         el('button', { class: 'tbl', onClick: () => tutup() }, 'Batal'),
         el('button', { class: 'tbl tbl-utama', gaya: { marginLeft: 'auto' }, onClick: simpan }, 'Simpan'),
       ],
-      lebar: '440px',
+      lebar: '480px',
+    })
+  }
+
+  // Buka kunci susulan: beri kelonggaran sprint untuk murid tertentu (atau
+  // perpanjang untuk semua). Murid dengan kelonggaran ditandai "susulan".
+  async function dialogSusulan(p, kelasId) {
+    let sprints = [], murid = [], adaKel = []
+    try {
+      const [{ data: s }, { data: pend }, { data: kel }] = await Promise.all([
+        sb.from('sprint').select('id, nomor, nama')
+          .eq('tujuan_pembelajaran_id', p.tujuan_pembelajaran?.id).order('nomor'),
+        sb.from('pendaftaran').select('murid_id, profil:murid_id(nama, no_absen)')
+          .eq('kelas_id', kelasId).eq('aktif', true),
+        sb.from('kelonggaran_sprint').select('sprint_id, murid_id, tenggat_khusus')
+          .eq('penugasan_id', p.id),
+      ])
+      sprints = s ?? []
+      murid = (pend ?? []).sort((a, b) =>
+        (a.profil?.no_absen ?? '').localeCompare(b.profil?.no_absen ?? '', undefined, { numeric: true }))
+      adaKel = kel ?? []
+    } catch (_) {}
+
+    if (!sprints.length) { roti('TP ini belum punya sprint', '⚠'); return }
+
+    const fSprint = el('select', {}, ...sprints.map(s =>
+      el('option', { value: s.id }, `Sprint ${s.nomor}${s.nama ? ' — ' + s.nama : ''}`)))
+    const fMurid = el('select', {},
+      el('option', { value: '__semua__' }, '— Semua murid (perpanjang tenggat) —'),
+      ...murid.map(m => el('option', { value: m.murid_id },
+        `${m.profil?.no_absen ? m.profil.no_absen + '. ' : ''}${m.profil?.nama ?? '—'}`)))
+    const fTenggat = el('input', { type: 'datetime-local' })
+    const galat = el('div')
+    let tutup
+
+    const daftarKel = el('div', { gaya: { marginTop: '10px' } })
+    function gambarKel() {
+      const namaMurid = Object.fromEntries(murid.map(m => [m.murid_id, m.profil?.nama ?? '—']))
+      const namaSprint = Object.fromEntries(sprints.map(s => [s.id, `Sprint ${s.nomor}`]))
+      isi(daftarKel, adaKel.length
+        ? el('div', {},
+            el('div', { class: 'bagian-judul' }, 'Kelonggaran aktif'),
+            ...adaKel.map(k => el('div', { class: 'mirip-baris' },
+              el('span', { class: 'mirip-nama' }, namaMurid[k.murid_id] ?? '—'),
+              el('span', {}, namaSprint[k.sprint_id] ?? ''),
+              el('span', { class: 'mirip-ket' }, k.tenggat_khusus
+                ? 'sampai ' + tanggalId(k.tenggat_khusus, true) : 'dibuka penuh'),
+              el('button', { class: 'tbl tbl-kecil tbl-bahaya', gaya: { marginLeft: 'auto' },
+                onClick: () => cabut(k) }, 'Cabut'))))
+        : null)
+    }
+
+    async function cabut(k) {
+      try {
+        const { error } = await sb.from('kelonggaran_sprint').delete()
+          .eq('penugasan_id', p.id).eq('sprint_id', k.sprint_id).eq('murid_id', k.murid_id)
+        if (error) throw error
+        adaKel = adaKel.filter(x => !(x.sprint_id === k.sprint_id && x.murid_id === k.murid_id))
+        gambarKel(); roti('Kelonggaran dicabut')
+      } catch (err) { roti(pesanGalat(err), '⚠') }
+    }
+
+    async function beri() {
+      isi(galat)
+      const sprintId = Number(fSprint.value)
+      const tenggatKhusus = fTenggat.value ? new Date(fTenggat.value).toISOString() : null
+      try {
+        if (fMurid.value === '__semua__') {
+          if (!tenggatKhusus) { isi(galat, el('div', { class: 'pesan pesan-galat' },
+            'Untuk semua murid, isi dulu tenggat barunya.')); return }
+          const { data: pen } = await sb.from('penugasan').select('tenggat_sprint').eq('id', p.id).single()
+          const ts = { ...(pen?.tenggat_sprint ?? {}), [sprintId]: tenggatKhusus }
+          const { error } = await sb.from('penugasan').update({ tenggat_sprint: ts }).eq('id', p.id)
+          if (error) throw error
+          tutup(); roti('Tenggat sprint diperpanjang untuk semua'); detilKelas(wadah, kelasId)
+        } else {
+          const { error } = await sb.from('kelonggaran_sprint').upsert({
+            penugasan_id: p.id, sprint_id: sprintId, murid_id: fMurid.value,
+            tenggat_khusus: tenggatKhusus, susulan: true,
+          }, { onConflict: 'penugasan_id,sprint_id,murid_id' })
+          if (error) throw error
+          adaKel = adaKel.filter(x => !(x.sprint_id === sprintId && x.murid_id === fMurid.value))
+          adaKel.push({ sprint_id: sprintId, murid_id: fMurid.value, tenggat_khusus: tenggatKhusus })
+          gambarKel()
+          roti('Kelonggaran diberikan')
+        }
+      } catch (err) { isi(galat, el('div', { class: 'pesan pesan-galat' }, pesanGalat(err))) }
+    }
+
+    gambarKel()
+    tutup = dialog({
+      judul: `Susulan — ${p.tujuan_pembelajaran?.kode ?? ''}`,
+      badan: el('div', {}, galat,
+        el('div', { class: 'ruas' }, el('label', {}, 'Sprint'), fSprint),
+        el('div', { class: 'ruas' }, el('label', {}, 'Murid'), fMurid),
+        el('div', { class: 'ruas' }, el('label', {}, 'Batas susulan (kosongkan = buka penuh)'), fTenggat),
+        el('p', { gaya: { fontSize: '12px', color: 'var(--tinta-lembut)', margin: '6px 0' } },
+          'Satu murid: kosongkan batas untuk membuka penuh, atau isi batas susulan. ' +
+          '“Semua murid”: isi batas untuk memperpanjang tenggat sprint bagi seluruh kelas. ' +
+          'Murid susulan nantinya dapat pengurangan poin (diatur di Pengaturan).'),
+        el('div', { gaya: { marginTop: '4px', textAlign: 'right' } },
+          el('button', { class: 'tbl tbl-utama', onClick: beri }, 'Beri kelonggaran')),
+        daftarKel),
+      kaki: [el('button', { class: 'tbl', gaya: { marginLeft: 'auto' }, onClick: () => tutup() }, 'Tutup')],
+      lebar: '500px',
     })
   }
 
