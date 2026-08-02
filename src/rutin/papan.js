@@ -12,10 +12,23 @@ import { sb } from '../lib/supabase.js'
 export async function muatPapan(penugasanId) {
   const { data: penugasan, error: e1 } = await sb
     .from('penugasan')
-    .select('id, dibuka, tenggat, tujuan_pembelajaran(id, kode, judul, total_menit, deskripsi, petunjuk_umum, materi_awal)')
+    .select('id, dibuka, mulai, tenggat, tujuan_pembelajaran(id, kode, judul, total_menit)')
     .eq('id', penugasanId)
     .single()
   if (e1) throw e1
+
+  // Ambil kolom pengantar (deskripsi, petunjuk_umum, materi_awal) SECARA
+  // TERPISAH & toleran: bila sebagian kolom belum ada (migrasi belum jalan),
+  // jangan sampai menggagalkan seluruh papan. Coba lengkap dulu, lalu mundur.
+  if (penugasan?.tujuan_pembelajaran?.id) {
+    const tpId = penugasan.tujuan_pembelajaran.id
+    let pengantar = null
+    for (const kolom of ['deskripsi, petunjuk_umum, materi_awal', 'deskripsi, petunjuk_umum', 'deskripsi']) {
+      const r = await sb.from('tujuan_pembelajaran').select(kolom).eq('id', tpId).single()
+      if (!r.error) { pengantar = r.data; break }
+    }
+    if (pengantar) Object.assign(penugasan.tujuan_pembelajaran, pengantar)
+  }
 
   const { data: sprints, error: e2 } = await sb
     .from('sprint')
