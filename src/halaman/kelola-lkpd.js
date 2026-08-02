@@ -12,6 +12,46 @@ import * as LK from '../lib/lembar.js'
 import { keadaan, pergiKe } from '../main.js'
 import { dialogLembar, dialogBadge } from './kelola-lembar.js'
 
+// Kotak teks berformat: textarea + baris tombol (B, I, U, •, 1.) yang
+// menyisipkan penanda Markdown di sekitar teks terpilih. Mengembalikan
+// { el, get } — el untuk dipasang, get() untuk membaca nilainya.
+function kotakFormat(nilaiAwal = '', baris = 3) {
+  const ta = el('textarea', { rows: String(baris), class: 'ta-format' }, nilaiAwal ?? '')
+
+  function bungkus(kiri, kanan = kiri) {
+    const a = ta.selectionStart ?? ta.value.length
+    const b = ta.selectionEnd ?? ta.value.length
+    const pilih = ta.value.slice(a, b) || 'teks'
+    ta.value = ta.value.slice(0, a) + kiri + pilih + kanan + ta.value.slice(b)
+    ta.focus()
+    ta.selectionStart = a + kiri.length
+    ta.selectionEnd = a + kiri.length + pilih.length
+  }
+  function awalBaris(tanda) {
+    const a = ta.selectionStart ?? ta.value.length
+    const b = ta.selectionEnd ?? a
+    const mulai = ta.value.lastIndexOf('\n', a - 1) + 1
+    const blok = ta.value.slice(mulai, b)
+    const baru = blok.split('\n').map((ln, i) =>
+      tanda === '1.' ? `${i + 1}. ${ln}` : `${tanda} ${ln}`).join('\n')
+    ta.value = ta.value.slice(0, mulai) + baru + ta.value.slice(b)
+    ta.focus()
+  }
+
+  const tbl = (label, judul, fn) => el('button', {
+    type: 'button', class: 'tbl tbl-kecil format-tbl', title: judul,
+    onClick: (e) => { e.preventDefault(); fn() } }, label)
+
+  const bar = el('div', { class: 'format-bar' },
+    tbl('B', 'Tebal', () => bungkus('**')),
+    tbl('I', 'Miring', () => bungkus('*')),
+    tbl('U', 'Garis bawah', () => bungkus('_')),
+    tbl('•', 'Daftar butir', () => awalBaris('-')),
+    tbl('1.', 'Daftar bernomor', () => awalBaris('1.')),
+  )
+  return { el: el('div', {}, bar, ta), get: () => ta.value }
+}
+
 /* ==========================================================
    DAFTAR LKPD
    ========================================================== */
@@ -301,9 +341,9 @@ async function setTerbit(wadah, tp, terbit) {
 function dialogTpUbah(wadah, tp) {
   const fKode = el('input', { type: 'text', value: tp.kode })
   const fJudul = el('input', { type: 'text', value: tp.judul })
-  const fDesk = el('textarea', { rows: '3' }, tp.deskripsi ?? '')
-  const fPetunjuk = el('textarea', { rows: '3' }, tp.petunjuk_umum ?? '')
-  const fMateri = el('textarea', { rows: '4' }, tp.materi_awal ?? '')
+  const fDesk = kotakFormat(tp.deskripsi ?? '', 3)
+  const fPetunjuk = kotakFormat(tp.petunjuk_umum ?? '', 3)
+  const fMateri = kotakFormat(tp.materi_awal ?? '', 4)
   const fJp = el('input', { type: 'number', min: '0', value: tp.total_jp ?? '' })
   const galat = el('div')
   let tutup
@@ -314,9 +354,9 @@ function dialogTpUbah(wadah, tp) {
     try {
       const { error } = await sb.from('tujuan_pembelajaran').update({
         kode: fKode.value.trim(), judul: fJudul.value.trim(),
-        deskripsi: fDesk.value.trim() || null,
-        petunjuk_umum: fPetunjuk.value.trim() || null,
-        materi_awal: fMateri.value.trim() || null,
+        deskripsi: fDesk.get().trim() || null,
+        petunjuk_umum: fPetunjuk.get().trim() || null,
+        materi_awal: fMateri.get().trim() || null,
         total_jp: fJp.value ? Number(fJp.value) : 0,
       }).eq('id', tp.id)
       if (error) throw error
@@ -333,12 +373,15 @@ function dialogTpUbah(wadah, tp) {
         el('div', { class: 'ruas' }, el('label', {}, 'Kode'), fKode),
         el('div', { class: 'ruas' }, el('label', {}, 'Total JP'), fJp)),
       el('div', { class: 'ruas' }, el('label', {}, 'Judul'), fJudul),
-      el('div', { class: 'ruas' }, el('label', {}, 'Latar belakang / deskripsi'), fDesk),
-      el('div', { class: 'ruas' }, el('label', {}, 'Petunjuk pengerjaan'), fPetunjuk),
-      el('div', { class: 'ruas' }, el('label', {}, 'Materi awal / bahan bacaan'), fMateri)),
+      el('div', { class: 'ruas' }, el('label', {}, 'Latar belakang / deskripsi'), fDesk.el),
+      el('div', { class: 'ruas' }, el('label', {}, 'Petunjuk pengerjaan'), fPetunjuk.el),
+      el('div', { class: 'ruas' }, el('label', {}, 'Materi awal / bahan bacaan'), fMateri.el),
+      el('p', { class: 'format-bantuan' },
+        'Tips format: **tebal**, *miring*, _garis bawah_. Awali baris dengan “- ” untuk butir, ' +
+        'atau “1. ” untuk nomor. Baris kosong memisah paragraf.')),
     kaki: [el('div', { gaya: { marginLeft: 'auto', display: 'flex', gap: '8px' } },
       el('button', { class: 'tbl', onClick: () => tutup() }, 'Batal'), simpan)],
-    lebar: '520px',
+    lebar: '560px',
   })
 }
 

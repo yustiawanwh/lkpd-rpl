@@ -739,3 +739,12 @@ textarea:disabled,input:disabled{opacity:.55;cursor:not-allowed;background:var(-
 .pengantar-judul{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
   color:var(--hijau);margin-bottom:5px}
 .pengantar-teks{font-size:14px;line-height:1.6;color:var(--tinta);white-space:pre-wrap}
+
+/* Toolbar format teks di editor LKPD */
+.format-bar{display:flex;gap:4px;margin-bottom:4px}
+.format-tbl{min-width:30px;font-weight:700;padding:3px 8px}
+.format-tbl[title="Miring"]{font-style:italic}
+.format-tbl[title="Garis bawah"]{text-decoration:underline}
+.format-bantuan{font-size:12px;color:var(--tinta-lembut);line-height:1.5;margin:6px 0 0;
+  background:var(--hijau-lembut);padding:8px 10px;border-radius:8px}
+.ta-format{width:100%}

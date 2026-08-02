@@ -4,6 +4,7 @@
 import { sb } from '../lib/supabase.js'
 import { el, isi, $, $$, roti, inisial, tunda, tanggalId, rangkaMuat } from '../lib/dom.js'
 import { pesanGalat } from '../lib/kesalahan.js'
+import { teksKeHtml } from '../lib/teks.js'
 import { pangkatUntuk, ambangBerikutnya, persenKeBerikutnya, formatWaktu } from '../lib/pangkat.js'
 import { hitungNilai, hitungNilaiSprint, predikatUntuk } from '../lib/nilai.js'
 import { muatPapan, ubahStatus, catatWaktu, papanPeringkat, statistikSaya, badgeSaya, rekapNilaiPerSprint }
@@ -251,7 +252,7 @@ function pengantarLkpd(tp) {
     ...bagian.map(([judul, teks]) =>
       el('div', { class: 'pengantar-bagian' },
         el('div', { class: 'pengantar-judul' }, judul),
-        el('div', { class: 'pengantar-teks' }, teks))))
+        el('div', { class: 'pengantar-teks', html: teksKeHtml(teks) }))))
 
   const panah = el('span', { class: 'arsip-panah' }, '▸')
   const kepala = el('button', { class: 'pengantar-kepala', 'aria-expanded': 'false',
