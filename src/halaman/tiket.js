@@ -2,7 +2,7 @@
  * Tiket tugas: deskripsi, pelacak waktu, catatan, unggah bukti.
  */
 import { sb } from '../lib/supabase.js'
-import { el, isi, $, $$, roti, dialog, tunda, konfirmasi } from '../lib/dom.js'
+import { el, isi, $, $$, roti, dialog, tunda, konfirmasi, tanggalId } from '../lib/dom.js'
 import { pesanGalat } from '../lib/kesalahan.js'
 import { teksKeHtml } from '../lib/teks.js'
 import { formatWaktu } from '../lib/pangkat.js'
@@ -107,6 +107,13 @@ export function dialogTiket(tugas, saatBerubah) {
   // Tugas terkunci: seluruh input (timer, catatan, bukti) dinonaktifkan.
   const terkunci = pr.terkunci === true
   let sprintLewat = false       // true bila sprint tugas ini sudah lewat tenggat
+  // Belum waktunya: tanggal mulai penugasan masih di masa depan.
+  // 'mulai' bertipe date (YYYY-MM-DD); tafsirkan sebagai 00:00 WIB (+07:00)
+  // agar konsisten dengan kunci server (Asia/Jakarta).
+  const mulaiPen = keadaan.penugasan?.mulai
+    ? new Date(String(keadaan.penugasan.mulai).slice(0, 10) + 'T00:00:00+07:00')
+    : null
+  const belumMulai = !!(mulaiPen && Date.now() < mulaiPen.getTime())
   let tabelIsiApi = null       // API tabel isian (untuk kunci mengikuti timer)
   let petunjukKerja = null     // banner petunjuk "tekan Mulai dulu"
 
@@ -118,8 +125,8 @@ export function dialogTiket(tugas, saatBerubah) {
   }, formatWaktu(detik))
 
   const tblTimer = el('button', { class: 'tbl tbl-kecil tbl-utama', onClick: toggleTimer,
-                                   disabled: terkunci },
-    timerAktif() === tugas.id ? '⏸ Jeda' : '▶ Mulai')
+                                   disabled: terkunci || belumMulai },
+    belumMulai ? '🔒 Belum waktunya' : (timerAktif() === tugas.id ? '⏸ Jeda' : '▶ Mulai'))
 
   function perbaruiWaktu(berhenti, d) {
     if (typeof d === 'number') detik = d
@@ -127,14 +134,15 @@ export function dialogTiket(tugas, saatBerubah) {
     angkaWaktu.className = 'waktu-angka'
       + (timerAktif() === tugas.id ? ' jalan' : '')
       + (est && detik > est ? ' lewat' : '')
-    tblTimer.textContent = timerAktif() === tugas.id ? '⏸ Jeda' : '▶ Mulai'
+    tblTimer.textContent = belumMulai ? '🔒 Belum waktunya'
+      : (timerAktif() === tugas.id ? '⏸ Jeda' : '▶ Mulai')
     perbaruiKunciIsi()
   }
 
   // Poin 4: isian hanya boleh diisi saat timer BERJALAN untuk tugas ini
   // (dan tugas tidak terkunci nilai/guru). Saat belum start atau dijeda,
   // isian dinonaktifkan agar murid tidak mengisi tanpa "bekerja".
-  const sedangKerja = () => timerAktif() === tugas.id && !terkunci && !sprintLewat
+  const sedangKerja = () => timerAktif() === tugas.id && !terkunci && !sprintLewat && !belumMulai
   function perbaruiKunciIsi() {
     const boleh = sedangKerja()
     if (catatan) catatan.disabled = !boleh
@@ -155,6 +163,11 @@ export function dialogTiket(tugas, saatBerubah) {
 
   async function toggleTimer() {
     if (terkunci) return   // tugas terkunci: timer tidak bisa dijalankan
+    if (belumMulai && timerAktif() !== tugas.id) {
+      roti('Belum waktunya — penugasan ini baru bisa dikerjakan mulai ' +
+        tanggalId(keadaan.penugasan.mulai, true), '🔒')
+      return
+    }
     // Sprint sudah lewat tenggat: hanya boleh menghentikan bila sedang jalan,
     // tapi tidak boleh MEMULAI lagi.
     if (sprintLewat && timerAktif() !== tugas.id) {
@@ -447,10 +460,14 @@ export function dialogTiket(tugas, saatBerubah) {
     ],
 
     // Petunjuk: isian aktif hanya saat timer berjalan (poin 4).
-    !terkunci && (petunjukKerja = el('div', { class: 'pesan pesan-info',
-      gaya: { display: (timerAktif() === tugas.id) ? 'none' : '' } },
-      '⏱ Tekan “Mulai” pada pelacak waktu untuk mulai mengisi tabel, catatan, dan bukti. ' +
-      'Saat timer dijeda, isian terkunci lagi.')),
+    !terkunci && (petunjukKerja = el('div', {
+      class: belumMulai ? 'pesan pesan-galat' : 'pesan pesan-info',
+      gaya: { display: (!belumMulai && timerAktif() === tugas.id) ? 'none' : '' } },
+      belumMulai
+        ? '🔒 Belum waktunya. Penugasan ini baru bisa dikerjakan mulai ' +
+          tanggalId(keadaan.penugasan.mulai, true) + '.'
+        : '⏱ Tekan “Mulai” pada pelacak waktu untuk mulai mengisi tabel, catatan, dan bukti. ' +
+          'Saat timer dijeda, isian terkunci lagi.')),
 
     // Tabel yang harus diisi untuk tugas ini (bila ada kaitannya).
     wadahLembar,
