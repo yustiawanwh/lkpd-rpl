@@ -391,7 +391,7 @@ function dialogSprint(wadah, tpId, nomorBaru, s = null) {
   const fNama = el('input', { type: 'text', placeholder: 'Menyiapkan Lingkungan Kerja', value: s?.nama ?? '' })
   const fHari = el('input', { type: 'text', placeholder: 'Senin', value: s?.hari ?? '' })
   const fJp = el('input', { type: 'text', placeholder: '8 JP', value: s?.jp ?? '' })
-  const fTujuan = el('textarea', { rows: '2', placeholder: 'Tujuan sprint ini.' }, s?.tujuan ?? '')
+  const fTujuan = kotakFormat(s?.tujuan ?? '', 2)
   const galat = el('div')
   let tutup
   const simpan = el('button', { class: 'tbl tbl-utama', onClick: kirim }, 'Simpan')
@@ -402,7 +402,7 @@ function dialogSprint(wadah, tpId, nomorBaru, s = null) {
     const data = {
       tujuan_pembelajaran_id: tpId, nomor: Number(fNomor.value),
       nama: fNama.value.trim(), hari: fHari.value.trim() || null,
-      jp: fJp.value.trim() || null, tujuan: fTujuan.value.trim() || null,
+      jp: fJp.value.trim() || null, tujuan: fTujuan.get().trim() || null,
     }
     try {
       const { error } = s
@@ -426,7 +426,7 @@ function dialogSprint(wadah, tpId, nomorBaru, s = null) {
         el('div', { class: 'ruas' }, el('label', {}, 'Hari'), fHari)),
       el('div', { class: 'ruas' }, el('label', {}, 'Nama sprint'), fNama),
       el('div', { class: 'ruas' }, el('label', {}, 'JP (mis. "8 JP")'), fJp),
-      el('div', { class: 'ruas' }, el('label', {}, 'Tujuan'), fTujuan)),
+      el('div', { class: 'ruas' }, el('label', {}, 'Tujuan'), fTujuan.el)),
     kaki: [el('div', { gaya: { marginLeft: 'auto', display: 'flex', gap: '8px' } },
       el('button', { class: 'tbl', onClick: () => tutup() }, 'Batal'), simpan)],
     lebar: '520px',
@@ -463,7 +463,7 @@ function dialogTugas(wadah, tpId, sprint, t = null) {
   const fLembar = el('input', { type: 'text', placeholder: 'mis. C1 atau C1,C2,C3 (kosongkan bila tak ada)',
     value: t?.lembar_kode ?? '',
     gaya: { textTransform: 'uppercase' } })
-  const fDesk = el('textarea', { rows: '3', placeholder: 'Apa yang harus dikerjakan murid.' }, t?.deskripsi ?? '')
+  const fDesk = kotakFormat(t?.deskripsi ?? '', 3)
   const fWajib = el('input', { type: 'checkbox', checked: t?.wajib_bukti ?? false })
   const galat = el('div')
 
@@ -491,7 +491,7 @@ function dialogTugas(wadah, tpId, sprint, t = null) {
       xp: fXp.value ? Number(fXp.value) : 0,
       bukti_diminta: fBukti.value.trim() || null,
       lembar_kode: fLembar.value.trim().toUpperCase() || null,
-      deskripsi: fDesk.value.trim() || null,
+      deskripsi: fDesk.get().trim() || null,
       wajib_bukti: fWajib.checked,
       urutan: t?.urutan ?? (sprint.tugas?.length ?? 0) + 1,
     }
@@ -517,7 +517,10 @@ function dialogTugas(wadah, tpId, sprint, t = null) {
         el('div', { class: 'ruas' }, el('label', {}, 'Jenis'), fJenis)),
       barisLevel,
       el('div', { class: 'ruas' }, el('label', {}, 'Judul'), fJudul),
-      el('div', { class: 'ruas' }, el('label', {}, 'Deskripsi'), fDesk),
+      el('div', { class: 'ruas' }, el('label', {}, 'Deskripsi'), fDesk.el),
+      el('p', { class: 'format-bantuan' },
+        'Tips format: **tebal**, *miring*, _garis bawah_. Awali baris dengan “- ” untuk butir, ' +
+        'atau “1. ” untuk nomor.'),
       el('div', { class: 'kisi-2' },
         el('div', { class: 'ruas' }, el('label', {}, 'Estimasi menit'), fMenit),
         el('div', { class: 'ruas' }, el('label', {}, 'XP'), fXp)),

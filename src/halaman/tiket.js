@@ -4,6 +4,7 @@
 import { sb } from '../lib/supabase.js'
 import { el, isi, $, $$, roti, dialog, tunda, konfirmasi } from '../lib/dom.js'
 import { pesanGalat } from '../lib/kesalahan.js'
+import { teksKeHtml } from '../lib/teks.js'
 import { formatWaktu } from '../lib/pangkat.js'
 import { ubahStatus, catatWaktu, simpanCatatan } from '../rutin/papan.js'
 import { buatTabelIsi, muatLembarSatu } from '../rutin/lembar-kerja.js'
@@ -425,7 +426,8 @@ export function dialogTiket(tugas, saatBerubah) {
 
     tugas.deskripsi && [
       el('div', { class: 'bagian-judul' }, 'Deskripsi tugas'),
-      el('p', { gaya: { fontSize: '14px', lineHeight: '1.6', margin: 0 } }, tugas.deskripsi),
+      el('div', { class: 'teks-format', gaya: { fontSize: '14px', lineHeight: '1.6' },
+        html: teksKeHtml(tugas.deskripsi) }),
     ],
 
     // Pelacak waktu DIPINDAH KE ATAS: murid menekan "Mulai" dulu, baru isian

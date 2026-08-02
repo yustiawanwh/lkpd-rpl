@@ -323,7 +323,7 @@ async function tampilPapan(wadah) {
           el('div', { class: 'spanduk-tag' },
             `Sprint ${s.nomor}${s.hari ? ' · ' + s.hari : ''}${s.jp ? ' · ' + s.jp : ''}`),
           el('h2', {}, s.nama),
-          s.tujuan && el('p', { class: 'spanduk-tujuan' }, s.tujuan),
+          s.tujuan && el('div', { class: 'spanduk-tujuan teks-format', html: teksKeHtml(s.tujuan) }),
         ),
         el('div', { class: 'spanduk-angka' },
           el('div', { class: 'angka-blok' },

@@ -748,3 +748,9 @@ textarea:disabled,input:disabled{opacity:.55;cursor:not-allowed;background:var(-
 .format-bantuan{font-size:12px;color:var(--tinta-lembut);line-height:1.5;margin:6px 0 0;
   background:var(--hijau-lembut);padding:8px 10px;border-radius:8px}
 .ta-format{width:100%}
+
+/* Teks berformat (deskripsi tugas, tujuan sprint) */
+.teks-format p{margin:0 0 8px}
+.teks-format p:last-child{margin-bottom:0}
+.teks-format ul,.teks-format ol{margin:4px 0 8px;padding-left:22px}
+.teks-format li{margin:2px 0}
