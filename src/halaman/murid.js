@@ -301,7 +301,7 @@ async function tampilPapan(wadah) {
 
     isi(wadah,
       // Pengantar LKPD (latar belakang, petunjuk, materi) — bisa dibuka/tutup.
-      pengantarLkpd(data.tujuan_pembelajaran),
+      pengantarLkpd(data.penugasan?.tujuan_pembelajaran),
 
       // Tab sprint
       el('div', { class: 'tab-lembar', role: 'tablist' },
