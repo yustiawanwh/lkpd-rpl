@@ -33,6 +33,7 @@ jobs:
           # Alamat & kunci Supabase diambil dari "Secrets" repositori.
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_FILES_URL: ${{ secrets.VITE_FILES_URL }}
           # base path otomatis = "/nama-repo/", diambil dari nama repositori.
           VITE_BASE: /${{ github.event.repository.name }}/
 
