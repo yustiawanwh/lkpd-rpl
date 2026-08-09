@@ -38,6 +38,20 @@ function kotakFormat(nilaiAwal = '', baris = 3) {
     ta.focus()
   }
 
+  // Sisipkan blok kode Dart di posisi kursor.
+  function sisipKode() {
+    const a = ta.selectionStart ?? ta.value.length
+    const b = ta.selectionEnd ?? a
+    const pilih = ta.value.slice(a, b) || '// tulis kode Dart di sini'
+    const blok = '\n```dart\n' + pilih + '\n```\n'
+    ta.value = ta.value.slice(0, a) + blok + ta.value.slice(b)
+    ta.focus()
+    // taruh kursor di dalam blok
+    const posisi = a + '\n```dart\n'.length
+    ta.selectionStart = posisi
+    ta.selectionEnd = posisi + pilih.length
+  }
+
   const tbl = (label, judul, fn) => el('button', {
     type: 'button', class: 'tbl tbl-kecil format-tbl', title: judul,
     onClick: (e) => { e.preventDefault(); fn() } }, label)
@@ -48,6 +62,7 @@ function kotakFormat(nilaiAwal = '', baris = 3) {
     tbl('U', 'Garis bawah', () => bungkus('_')),
     tbl('•', 'Daftar butir', () => awalBaris('-')),
     tbl('1.', 'Daftar bernomor', () => awalBaris('1.')),
+    tbl('{ }', 'Blok kode Dart', () => sisipKode()),
   )
   return { el: el('div', {}, bar, ta), get: () => ta.value }
 }
@@ -378,7 +393,7 @@ function dialogTpUbah(wadah, tp) {
       el('div', { class: 'ruas' }, el('label', {}, 'Materi awal / bahan bacaan'), fMateri.el),
       el('p', { class: 'format-bantuan' },
         'Tips format: **tebal**, *miring*, _garis bawah_. Awali baris dengan “- ” untuk butir, ' +
-        'atau “1. ” untuk nomor. Baris kosong memisah paragraf.')),
+        'atau “1. ” untuk nomor. Tombol { } menyisipkan blok kode Dart berwarna. Baris kosong memisah paragraf.')),
     kaki: [el('div', { gaya: { marginLeft: 'auto', display: 'flex', gap: '8px' } },
       el('button', { class: 'tbl', onClick: () => tutup() }, 'Batal'), simpan)],
     lebar: '560px',
@@ -520,7 +535,7 @@ function dialogTugas(wadah, tpId, sprint, t = null) {
       el('div', { class: 'ruas' }, el('label', {}, 'Deskripsi'), fDesk.el),
       el('p', { class: 'format-bantuan' },
         'Tips format: **tebal**, *miring*, _garis bawah_. Awali baris dengan “- ” untuk butir, ' +
-        'atau “1. ” untuk nomor.'),
+        'atau “1. ” untuk nomor. Tombol { } menyisipkan blok kode Dart berwarna.'),
       el('div', { class: 'kisi-2' },
         el('div', { class: 'ruas' }, el('label', {}, 'Estimasi menit'), fMenit),
         el('div', { class: 'ruas' }, el('label', {}, 'XP'), fXp)),
