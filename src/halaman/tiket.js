@@ -5,6 +5,7 @@ import { sb } from '../lib/supabase.js'
 import { el, isi, $, $$, roti, dialog, tunda, konfirmasi, tanggalId } from '../lib/dom.js'
 import { pesanGalat } from '../lib/kesalahan.js'
 import { teksKeHtml } from '../lib/teks.js'
+import { unggahBukti, urlBukti, hapusBukti } from '../lib/bukti.js'
 import { formatWaktu } from '../lib/pangkat.js'
 import { ubahStatus, catatWaktu, simpanCatatan } from '../rutin/papan.js'
 import { buatTabelIsi, muatLembarSatu } from '../rutin/lembar-kerja.js'
@@ -248,13 +249,11 @@ export function dialogTiket(tugas, saatBerubah) {
         const kecil = await kecilkanGambar(f)
         const sidik = await sidikGambar(kecil)
         const nama = `${keadaan.profil.id}/${tugas.id}-${Date.now()}-${i}.jpg`
-        const { error: e1 } = await sb.storage.from('bukti')
-          .upload(nama, kecil, { contentType: 'image/jpeg', upsert: true })
-        if (e1) throw e1
+        const { path } = await unggahBukti(nama, kecil)   // R2 (r2:...) atau Supabase
         const p = await ubahStatus(keadaan.penugasan.id, keadaan.profil.id, tugas.id, status)
         const { data: baris, error: e2 } = await sb.from('lampiran').insert({
           murid_id: keadaan.profil.id, progres_tugas_id: p.id,
-          nama_asli: f.name, path: nama, mime: 'image/jpeg', ukuran: kecil.size, sidik,
+          nama_asli: f.name, path, mime: 'image/jpeg', ukuran: kecil.size, sidik,
         }).select('id, nama_asli, path').single()
         if (e2) throw e2
         daftarBukti.push(baris)
@@ -289,7 +288,7 @@ export function dialogTiket(tugas, saatBerubah) {
     })
     if (!ya) return
     try {
-      await sb.storage.from('bukti').remove([item.path]).catch(() => {})
+      await hapusBukti(item.path)   // R2 atau Supabase sesuai path
       const { error } = await sb.from('lampiran').delete().eq('id', item.id)
       if (error) throw error
       daftarBukti = daftarBukti.filter(x => x.id !== item.id)
@@ -304,9 +303,9 @@ export function dialogTiket(tugas, saatBerubah) {
     for (const item of daftarBukti) {
       const kartu = el('div', { class: 'bukti-item' })
       try {
-        const { data } = await sb.storage.from('bukti').createSignedUrl(item.path, 3600)
-        if (data?.signedUrl) {
-          kartu.append(el('img', { class: 'bukti-gambar', src: data.signedUrl,
+        const src = await urlBukti(item.path)
+        if (src) {
+          kartu.append(el('img', { class: 'bukti-gambar', src,
                                     alt: 'Bukti ' + tugas.kode }))
         }
       } catch {}

@@ -12,6 +12,7 @@ import { halamanNilai } from './nilai.js'
 import { halamanPengawasan } from './pengawasan.js'
 import { halamanDashboard } from './dashboard.js'
 import { jarakSidik } from './tiket.js'
+import { urlBukti } from '../lib/bukti.js'
 
 export async function halamanGuru(wadah, r) {
   const tampilan = r.nama || 'kelas'
@@ -1357,8 +1358,7 @@ async function muatKoreksi(p, tpId, penugasanId) {
     if (lampiran?.length) {
       anak.push(el('div', { gaya: { fontSize: '12.5px', fontWeight: '600', margin: '10px 0 4px' } }, 'Bukti diunggah'))
       for (const f of lampiran) {
-        const { data: url } = await sb.storage.from('bukti').createSignedUrl(f.path, 3600)
-        const tautan = url?.signedUrl ?? '#'
+        const tautan = (await urlBukti(f.path).catch(() => null)) ?? '#'
         const isImg = (f.mime ?? '').startsWith('image/')
         anak.push(el('div', { class: 'koreksi-berkas' },
           isImg
