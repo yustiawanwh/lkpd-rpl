@@ -54,7 +54,8 @@ function bilah(aktif) {
   ]
 
   return el('header', { class: 'bilah' },
-    el('div', { class: 'bilah-merek' },
+    el('button', { class: 'bilah-merek bilah-merek-klik', title: 'Kembali ke beranda',
+      onClick: () => { keadaan.penugasan = null; pergiKe('') } },
       el('span', { class: 'bilah-tanda' }, 'B'), 'Brantas Dev Studio'),
 
     el('nav', { class: 'bilah-nav' },
@@ -94,7 +95,8 @@ async function daftarKelas(wadah) {
 
   isi(wadah,
     el('header', { class: 'bilah' },
-      el('div', { class: 'bilah-merek' },
+      el('button', { class: 'bilah-merek bilah-merek-klik', title: 'Kembali ke beranda',
+        onClick: () => { keadaan.penugasan = null; pergiKe('') } },
         el('span', { class: 'bilah-tanda' }, 'B'), 'Brantas Dev Studio'),
       el('div', { class: 'bilah-kanan' },
         el('div', { class: 'bilah-siapa' }, el('b', {}, p.nama)),

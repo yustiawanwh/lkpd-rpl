@@ -74,7 +74,7 @@ export function teksKeHtml(teks) {
       continue
     }
     const butir = t.match(/^[-•]\s+(.*)$/)         // "- item" atau "• item"
-    const nomor = t.match(/^\d+[.)]\s+(.*)$/)      // "1. item" atau "1) item"
+    const nomor = t.match(/^(\d+)[.)]\s+(.*)$/)    // "1. item" atau "1) item" (grup 1 = angka)
 
     if (butir) {
       tutupParagraf()
@@ -82,8 +82,14 @@ export function teksKeHtml(teks) {
       keluar.push('<li>' + inline(butir[1]) + '</li>')
     } else if (nomor) {
       tutupParagraf()
-      if (mode !== 'ol') { tutupDaftar(); keluar.push('<ol>'); mode = 'ol' }
-      keluar.push('<li>' + inline(nomor[1]) + '</li>')
+      if (mode !== 'ol') {
+        tutupDaftar()
+        // Hormati angka yang diketik: mulai <ol> dari angka pertama kelompok ini.
+        const mulai = parseInt(nomor[1], 10)
+        keluar.push(mulai > 1 ? `<ol start="${mulai}">` : '<ol>')
+        mode = 'ol'
+      }
+      keluar.push('<li>' + inline(nomor[2]) + '</li>')
     } else if (t === '') {
       // Baris kosong → pisah paragraf / akhiri daftar.
       tutupParagraf(); tutupDaftar()

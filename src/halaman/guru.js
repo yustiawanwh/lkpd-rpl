@@ -45,7 +45,8 @@ function bilah(aktif) {
   const admin = p.peran === 'admin'
 
   return el('header', { class: 'bilah' },
-    el('div', { class: 'bilah-merek' },
+    el('button', { class: 'bilah-merek bilah-merek-klik', title: 'Kembali ke beranda',
+      onClick: () => pergiKe('') },
       el('span', { class: 'bilah-tanda' }, 'B'), 'Brantas Dev Studio'),
 
     el('nav', { class: 'bilah-nav' },

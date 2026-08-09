@@ -771,3 +771,10 @@ textarea:disabled,input:disabled{opacity:.55;cursor:not-allowed;background:var(-
 .tok-komentar{color:#7f849c;font-style:italic}  /* komentar: abu */
 .tok-angka{color:#fab387}      /* angka: oranye */
 .tok-anotasi{color:#f9e2af}    /* @anotasi: kuning */
+
+/* Merek di bilah bisa diklik untuk kembali ke beranda */
+.bilah-merek-klik{background:none;border:none;cursor:pointer;color:inherit;padding:0;
+  font-family:var(--serif);font-size:15.5px;font-weight:600}
+.bilah-merek-klik:hover{opacity:.8}
+.bilah-merek-klik:hover .bilah-tanda{transform:scale(1.05)}
+.bilah-tanda{transition:transform .15s ease}
