@@ -15,7 +15,7 @@
  * bukti diperlakukan sebagai Supabase (perilaku lama) — aman bila server file
  * belum disiapkan.
  *
- * KEAMANAN: berkas disimpan dalam subfolder tersembunyi ".worker-app/" dengan
+ * KEAMANAN: berkas disimpan di folder tersembunyi .app_data/ (diatur Worker) dengan
  * NAMA ACAK yang sulit ditebak, sehingga orang lain tidak mudah menebak URL
  * bukti murid.
  */
@@ -24,7 +24,8 @@ import { sb } from './supabase.js'
 // Base URL server file (tanpa garis miring akhir). Pastikan diawali https://
 const BASE = (import.meta.env.VITE_FILES_URL || '').replace(/\/$/, '')
 const PENGAWALAN = 'nc:'
-const FOLDER = '.worker-app'   // subfolder tersembunyi untuk berkas aplikasi
+// Worker sudah otomatis menaruh berkas di folder tersembunyi .app_data/ di
+// Nextcloud, jadi kita cukup mengirim NAMA berkas (tanpa subfolder tambahan).
 
 export function pakaiServerFile() {
   return BASE.length > 0
@@ -38,7 +39,9 @@ function namaAcak(ext = 'jpg') {
 }
 
 function urlPenuh(pathRelatif) {
-  return `${BASE}/${pathRelatif}`
+  // Pastikan ada skema https:// (dokumentasi kadang menulis URL tanpa skema).
+  const dasar = /^https?:\/\//i.test(BASE) ? BASE : `https://${BASE}`
+  return `${dasar}/${pathRelatif}`
 }
 
 /**
@@ -48,7 +51,7 @@ function urlPenuh(pathRelatif) {
  */
 export async function unggahBukti(namaSaran, blob) {
   if (pakaiServerFile()) {
-    const rel = `${FOLDER}/${namaAcak('jpg')}`
+    const rel = namaAcak('jpg')   // Worker menaruhnya di .app_data/ otomatis
     const resp = await fetch(urlPenuh(rel), {
       method: 'PUT',
       headers: { 'Content-Type': blob.type || 'image/jpeg' },
