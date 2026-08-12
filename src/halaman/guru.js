@@ -1113,7 +1113,7 @@ function kartuMuridArsip(k, penugasanId, tpId, wadah, miripMap = null) {
         '🔍 Mirip dengan: ' + [...miripNama].join(', '))),
   )
 
-  return el('div', { class: 'grup-murid' + (mirip ? ' grup-mirip' : '') }, kepala, isiTugas)
+  return el('div', { class: 'grup-murid' }, kepala, isiTugas)
 }
 
 function kartuArsip(p, penugasanId, wadah, miripNama = null) {
