@@ -949,6 +949,9 @@ async function antreanReview(wadah, penugasanId) {
     || (a.profil?.no_absen ?? '').localeCompare(b.profil?.no_absen ?? '')
     || (a.profil?.nama ?? '').localeCompare(b.profil?.nama ?? ''))
 
+  // Penanda kemiripan: himpunan id murid dengan bukti/isian sangat mirip.
+  const miripSet = await muridMirip(penugasanId, pen?.kelas_id)
+
   isi(wadah,
     el('div', { class: 'kepala' },
       el('div', {},
@@ -962,15 +965,18 @@ async function antreanReview(wadah, penugasanId) {
 
     data.length
       ? el('div', { class: 'tumpuk-murid' }, ...kelompok.map(k =>
-          el('div', { class: 'grup-murid' },
+          el('div', { class: 'grup-murid' + (miripSet.has(k.murid_id) ? ' grup-mirip' : '') },
             el('div', { class: 'grup-murid-kepala' },
               el('span', { class: 'avatar', gaya: { width: '30px', height: '30px', fontSize: '11px' } },
                 inisial(k.profil?.nama)),
               el('div', {},
-                el('div', { gaya: { fontWeight: '600', fontSize: '14px' } }, k.profil?.nama ?? '—'),
+                el('div', { gaya: { fontWeight: '600', fontSize: '14px' } },
+                  (miripSet.has(k.murid_id) ? '⚠ ' : '') + (k.profil?.nama ?? '—')),
                 el('div', { gaya: { fontSize: '11.5px', color: 'var(--tinta-lembut)' } },
                   (k.profil?.no_absen ? `Absen ${k.profil.no_absen} · ` : '') +
-                  `${k.tugas.length} tugas menunggu`)),
+                  `${k.tugas.length} tugas menunggu`),
+                miripSet.has(k.murid_id) && el('div', { class: 'mirip-dengan' },
+                  '🔍 Mirip dengan: ' + [...miripSet.get(k.murid_id)].join(', '))),
             ),
             el('div', { class: 'tumpuk' }, ...k.tugas.map(p => kartuReview(p, penugasanId, wadah))),
           )))
@@ -1019,6 +1025,9 @@ async function arsipDinilai(wadah, penugasanId) {
     || (a.profil?.no_absen ?? '').localeCompare(b.profil?.no_absen ?? '')
     || (a.profil?.nama ?? '').localeCompare(b.profil?.nama ?? ''))
 
+  // Penanda kemiripan: himpunan id murid dengan bukti/isian sangat mirip.
+  const miripSet = await muridMirip(penugasanId, pen?.kelas_id)
+
   isi(wadah,
     el('div', { class: 'kepala' },
       el('div', {},
@@ -1032,7 +1041,7 @@ async function arsipDinilai(wadah, penugasanId) {
 
     data.length
       ? el('div', { class: 'tumpuk-murid' }, ...kelompok.map(k =>
-          kartuMuridArsip(k, penugasanId, pen?.tujuan_pembelajaran?.id, wadah)))
+          kartuMuridArsip(k, penugasanId, pen?.tujuan_pembelajaran?.id, wadah, miripSet.get(k.murid_id))))
       : el('div', { class: 'panel' }, el('div', { class: 'kosong' },
           el('h3', {}, 'Belum ada yang dinilai'),
           el('p', {}, 'Tugas yang sudah kamu beri nilai A–E akan muncul di sini, ' +
@@ -1043,7 +1052,8 @@ async function arsipDinilai(wadah, penugasanId) {
 // Satu murid pada halaman "Sudah Dinilai": nama bisa diklik untuk membuka/menutup
 // daftar tugasnya (default tertutup agar ringkas). Di dalamnya, tugas
 // dikelompokkan per sprint (1 → terbesar), tiap sprint diurut id terkecil→terbesar.
-function kartuMuridArsip(k, penugasanId, tpId, wadah) {
+function kartuMuridArsip(k, penugasanId, tpId, wadah, miripNama = null) {
+  const mirip = miripNama && miripNama.size > 0
   let terbuka = false
   const isiTugas = el('div', { class: 'grup-murid-isi', gaya: { display: 'none' } })
   let sudahMuat = false
@@ -1088,13 +1098,16 @@ function kartuMuridArsip(k, penugasanId, tpId, wadah) {
     el('span', { class: 'avatar', gaya: { width: '30px', height: '30px', fontSize: '11px' } },
       inisial(k.profil?.nama)),
     el('div', { gaya: { flex: '1', textAlign: 'left' } },
-      el('div', { gaya: { fontWeight: '600', fontSize: '14px' } }, k.profil?.nama ?? '—'),
+      el('div', { gaya: { fontWeight: '600', fontSize: '14px' } },
+        (mirip ? '⚠ ' : '') + (k.profil?.nama ?? '—')),
       el('div', { gaya: { fontSize: '11.5px', color: 'var(--tinta-lembut)' } },
         (k.profil?.no_absen ? `Absen ${k.profil.no_absen} · ` : '') +
-        `${k.tugas.length} tugas dinilai`)),
+        `${k.tugas.length} tugas dinilai`),
+      mirip && el('div', { class: 'mirip-dengan' },
+        '🔍 Mirip dengan: ' + [...miripNama].join(', '))),
   )
 
-  return el('div', { class: 'grup-murid' }, kepala, isiTugas)
+  return el('div', { class: 'grup-murid' + (mirip ? ' grup-mirip' : '') }, kepala, isiTugas)
 }
 
 function kartuArsip(p, penugasanId, wadah) {
@@ -1159,6 +1172,77 @@ function kartuArsip(p, penugasanId, wadah) {
       ),
     ),
   )
+}
+
+// Mengembalikan Set berisi id murid yang punya bukti/isian SANGAT MIRIP dengan
+// murid lain pada penugasan ini (alat bantu; TIDAK memengaruhi nilai). Dipakai
+// untuk menandai kartu review & arsip agar guru menilai dengan bijak.
+// Mengembalikan Map: id murid → Set nama murid lain yang bukti/isiannya SANGAT
+// MIRIP dengannya pada penugasan ini (alat bantu; TIDAK memengaruhi nilai).
+// Dipakai untuk menandai kartu review & arsip beserta "mirip dengan siapa".
+async function muridMirip(penugasanId, kelasId) {
+  const peta = new Map()   // muridId -> Set<nama lawan>
+  try {
+    const [{ data: lampiran }, { data: isian }, { data: pendaftaran }] = await Promise.all([
+      sb.from('lampiran')
+        .select('murid_id, sidik, progres_tugas:progres_tugas_id(penugasan_id)')
+        .not('sidik', 'is', null),
+      sb.from('isian_lembar')
+        .select('murid_id, lembar_kerja_id, data')
+        .eq('penugasan_id', penugasanId),
+      sb.from('pendaftaran')
+        .select('murid_id, profil:murid_id(nama)')
+        .eq('kelas_id', kelasId).eq('aktif', true),
+    ])
+
+    const nama = {}
+    for (const d of (pendaftaran ?? [])) nama[d.murid_id] = d.profil?.nama ?? '—'
+    // Catat sepasang murid sebagai saling mirip (simpan nama lawannya).
+    const tandai = (a, b) => {
+      if (a === b) return
+      ;(peta.get(a) ?? peta.set(a, new Set()).get(a)).add(nama[b] ?? '—')
+      ;(peta.get(b) ?? peta.set(b, new Set()).get(b)).add(nama[a] ?? '—')
+    }
+
+    // 1. Gambar: jarak Hamming <= 8 (dari 256 bit) = sangat mirip/identik.
+    const L = (lampiran ?? []).filter(l => l.sidik &&
+      l.progres_tugas?.penugasan_id === penugasanId)
+    for (let i = 0; i < L.length; i++) {
+      for (let j = i + 1; j < L.length; j++) {
+        if (L[i].murid_id === L[j].murid_id) continue
+        if (jarakSidik(L[i].sidik, L[j].sidik) <= 8) tandai(L[i].murid_id, L[j].murid_id)
+      }
+    }
+
+    // 2. Isian tabel: proporsi sel sama >= 85%.
+    const perLembar = {}
+    for (const it of (isian ?? [])) {
+      (perLembar[it.lembar_kerja_id] ??= []).push(it)
+    }
+    const rasioSel = (a, b) => {
+      const kunci = new Set([...Object.keys(a ?? {}), ...Object.keys(b ?? {})])
+      let total = 0, sama = 0
+      for (const baris of kunci) {
+        const ra = a?.[baris] ?? {}, rb = b?.[baris] ?? {}
+        for (const kol of new Set([...Object.keys(ra), ...Object.keys(rb)])) {
+          const va = String(ra[kol] ?? '').trim(), vb = String(rb[kol] ?? '').trim()
+          if (va === '' && vb === '') continue
+          total++; if (va !== '' && va === vb) sama++
+        }
+      }
+      return total > 0 ? sama / total : 0
+    }
+    for (const k of Object.keys(perLembar)) {
+      const arr = perLembar[k]
+      for (let i = 0; i < arr.length; i++) {
+        for (let j = i + 1; j < arr.length; j++) {
+          if (arr[i].murid_id === arr[j].murid_id) continue
+          if (rasioSel(arr[i].data, arr[j].data) >= 0.85) tandai(arr[i].murid_id, arr[j].murid_id)
+        }
+      }
+    }
+  } catch (_) { /* diam: penanda bersifat opsional */ }
+  return peta
 }
 
 // Penanda kemiripan (alat bantu guru, TIDAK memengaruhi nilai). Membandingkan

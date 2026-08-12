@@ -778,3 +778,14 @@ textarea:disabled,input:disabled{opacity:.55;cursor:not-allowed;background:var(-
 .bilah-merek-klik:hover{opacity:.8}
 .bilah-merek-klik:hover .bilah-tanda{transform:scale(1.05)}
 .bilah-tanda{transition:transform .15s ease}
+
+/* Penanda kemiripan: kartu murid dengan bukti/isian sangat mirip (anti-contek).
+   Warna merah lembut yang nyaman di mata, bukan merah menyala. */
+.grup-mirip{background:#fdecec;border:1px solid #f3b6b6;border-radius:12px;
+  box-shadow:inset 0 0 0 9999px rgba(220,80,80,.03)}
+.grup-mirip .grup-murid-kepala{color:#a83232}
+.grup-mirip .avatar{background:#e9a0a0;color:#fff}
+
+/* Baris "mirip dengan siapa" pada kartu murid */
+.mirip-dengan{margin-top:3px;font-size:11.5px;font-weight:600;color:#a83232;
+  line-height:1.4}
