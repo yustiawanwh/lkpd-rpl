@@ -20,17 +20,19 @@ import { keadaan, pergiKe } from '../main.js'
 export async function halamanPengaturan(wadah) {
   isi(wadah, el('div', { class: 'tumpuk' }, rangkaMuat('160px'), rangkaMuat('160px')))
 
-  let tahun, mapel, bobot
+  let tahun, mapel, bobot, antiSalin
   try {
-    const [rt, rm, rb] = await Promise.all([
+    const [rt, rm, rb, ras] = await Promise.all([
       sb.from('tahun_ajaran').select('*').order('nama', { ascending: false }),
       sb.from('mata_pelajaran').select('*').order('tingkat').order('nama'),
       sb.from('pengaturan').select('nilai').eq('kunci', 'bobot_nilai').maybeSingle(),
+      sb.from('pengaturan').select('nilai').eq('kunci', 'anti_salin').maybeSingle(),
     ])
     if (rt.error) throw rt.error
     if (rm.error) throw rm.error
     tahun = rt.data; mapel = rm.data
     bobot = rb.data?.nilai ?? null
+    antiSalin = ras.data?.nilai?.aktif === true   // bawaan: nonaktif
   } catch (err) {
     isi(wadah, el('div', { class: 'pesan pesan-galat' }, pesanGalat(err)))
     return
@@ -98,6 +100,49 @@ export async function halamanPengaturan(wadah) {
 
     // ---- Pengaturan Nilai ----
     panelNilai(bobot, adminSaja, wadah),
+
+    // ---- Anti Salin-Tempel (halaman murid) ----
+    panelAntiSalin(antiSalin, adminSaja, wadah),
+  )
+}
+
+// Panel sakelar anti salin-tempel. Bila aktif, halaman murid memblokir
+// copy/cut/paste/klik-kanan/seleksi teks (kolom isian tetap bisa diketik).
+function panelAntiSalin(aktif, adminSaja, wadah) {
+  const kotak = el('input', { type: 'checkbox', ...(aktif ? { checked: '' } : {}),
+    ...(adminSaja ? {} : { disabled: '' }) })
+  const galat = el('div')
+
+  async function simpan() {
+    isi(galat)
+    try {
+      const { error } = await sb.from('pengaturan').upsert(
+        { kunci: 'anti_salin', nilai: { aktif: kotak.checked }, diubah_pada: new Date().toISOString() },
+        { onConflict: 'kunci' })
+      if (error) throw error
+      roti(kotak.checked ? 'Anti salin-tempel diaktifkan' : 'Anti salin-tempel dimatikan')
+    } catch (err) {
+      kotak.checked = !kotak.checked   // kembalikan bila gagal
+      isi(galat, el('div', { class: 'pesan pesan-galat' }, pesanGalat(err)))
+    }
+  }
+  if (adminSaja) kotak.addEventListener('change', simpan)
+
+  return el('section', { class: 'panel' },
+    el('div', { class: 'panel-isi' },
+      el('div', { class: 'seksi-kepala' }, el('h2', {}, 'Anti Salin-Tempel')),
+      el('p', { gaya: { color: 'var(--tinta-lembut)', fontSize: '13px', marginTop: '4px' } },
+        'Bila aktif, di halaman murid fungsi menyalin, menempel, memotong, klik-kanan, ' +
+        'dan menyeleksi teks dinonaktifkan (kolom jawaban tetap bisa diketik). ' +
+        'Halaman guru & admin tidak terpengaruh.'),
+      el('label', { class: 'anti-salin-baris' }, kotak,
+        el('span', {}, 'Aktifkan anti salin-tempel di halaman murid')),
+      el('p', { gaya: { fontSize: '12px', color: 'var(--tinta-lembut)', marginTop: '6px' } },
+        'Catatan: ini penghalang yang mengurangi kecurangan spontan, bukan proteksi mutlak. ' +
+        'Paling efektif digabung dengan penanda kemiripan.'),
+      !adminSaja && el('p', { gaya: { marginTop: '10px', fontSize: '12.5px', color: 'var(--tinta-lembut)' } },
+        'Hanya admin yang bisa mengubah pengaturan ini.'),
+      galat),
   )
 }
 

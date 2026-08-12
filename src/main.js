@@ -15,6 +15,7 @@ import { el, isi, $, roti } from './lib/dom.js'
 import { pesanGalat } from './lib/kesalahan.js'
 import { halamanMasuk } from './halaman/masuk.js'
 import { halamanMurid } from './halaman/murid.js'
+import { pasangAntiSalin, lepasAntiSalin, antiSalinAktif } from './lib/anti-salin.js'
 import { halamanGuru } from './halaman/guru.js'
 
 const akar = $('#akar')
@@ -68,8 +69,12 @@ async function gambar() {
 
   try {
     if (guru && r.nama !== 'murid') {
+      lepasAntiSalin()   // guru/admin: tak pernah diblokir
       await halamanGuru(akar, r)
     } else {
+      // Halaman murid: terapkan anti salin-tempel bila pengaturan aktif.
+      if (keadaan.profil.peran === 'murid' && await antiSalinAktif()) pasangAntiSalin()
+      else lepasAntiSalin()
       await halamanMurid(akar, r)
     }
   } catch (err) {
@@ -87,6 +92,7 @@ async function gambar() {
 }
 
 export async function keluar() {
+  lepasAntiSalin()
   await sb.auth.signOut()
   keadaan.profil = null
   keadaan.penugasan = null

@@ -793,3 +793,15 @@ textarea:disabled,input:disabled{opacity:.55;cursor:not-allowed;background:var(-
 /* Penanda kemiripan pada KARTU PEKERJAAN spesifik (bukan seluruh tugas murid) */
 .panel-mirip{background:#fdecec;border:1px solid #f3b6b6}
 .panel-mirip .avatar{background:#e9a0a0;color:#fff}
+
+/* Anti salin-tempel (halaman murid) — lapis CSS untuk cegah seleksi teks,
+   kecuali di kolom isian agar murid tetap bisa mengetik & memilih teksnya. */
+body.anti-salin-aktif{-webkit-user-select:none;-moz-user-select:none;user-select:none}
+body.anti-salin-aktif input,
+body.anti-salin-aktif textarea,
+body.anti-salin-aktif [contenteditable="true"]{-webkit-user-select:text;-moz-user-select:text;user-select:text}
+
+/* Baris sakelar anti salin di Pengaturan */
+.anti-salin-baris{display:flex;align-items:center;gap:9px;margin-top:12px;
+  font-size:14px;cursor:pointer}
+.anti-salin-baris input{width:17px;height:17px;cursor:pointer}
