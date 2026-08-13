@@ -8,6 +8,31 @@
  */
 import { sb } from '../lib/supabase.js'
 
+/**
+ * Ambil SEMUA baris dari sebuah query Supabase, melewati batas default
+ * PostgREST (1000 baris) dengan paginasi .range(). Tanpa ini, penugasan besar
+ * (mis. 35 murid × puluhan tugas > 1000 baris) akan terpotong, membuat
+ * sebagian murid kehilangan nilai (tampak 0 padahal sudah dinilai).
+ *
+ * `buatQuery` adalah fungsi yang mengembalikan query baru tiap dipanggil
+ * (karena query Supabase sekali pakai). Contoh:
+ *   ambilSemua(() => sb.from('t').select('*').eq('x', 1))
+ */
+async function ambilSemua(buatQuery) {
+  const UKURAN = 1000
+  let mulai = 0
+  const semua = []
+  for (;;) {
+    const { data, error } = await buatQuery().range(mulai, mulai + UKURAN - 1)
+    if (error) throw error
+    const batch = data ?? []
+    semua.push(...batch)
+    if (batch.length < UKURAN) break   // batch terakhir
+    mulai += UKURAN
+  }
+  return semua
+}
+
 /** Seluruh tugas satu TP beserta progres murid yang sedang masuk. */
 export async function muatPapan(penugasanId) {
   const { data: penugasan, error: e1 } = await sb
@@ -196,16 +221,18 @@ export async function rekapNilaiPerSprint(penugasanId, tpId) {
   })
 
   // 2. Progres SELESAI + nilai huruf + waktu serah.
-  const { data: progres, error: e1 } = await sb
+  //    Pakai ambilSemua agar TIDAK terpotong batas 1000 baris (penugasan besar
+  //    bisa > 1000 baris → sebelumnya membuat sebagian murid bernilai 0).
+  const progres = await ambilSemua(() => sb
     .from('progres_tugas')
     .select('murid_id, tugas_id, status, nilai_huruf, diserahkan_pada, profil:murid_id(nama, no_absen)')
     .eq('penugasan_id', penugasanId)
-    .eq('status', 'selesai')
-  if (e1) throw e1
+    .eq('status', 'selesai'))
 
   // 3. Badge per sprint: perolehan + syarat badge (untuk tahu sprint mana).
-  const [{ data: perolehan }, { data: badges }] = await Promise.all([
-    sb.from('perolehan_badge').select('murid_id, badge_id, diraih_pada').eq('penugasan_id', penugasanId),
+  //    perolehan juga dipaginasi (kelas besar bisa > 1000 baris badge).
+  const [perolehan, { data: badges }] = await Promise.all([
+    ambilSemua(() => sb.from('perolehan_badge').select('murid_id, badge_id, diraih_pada').eq('penugasan_id', penugasanId)),
     sb.from('badge').select('id, syarat').eq('tujuan_pembelajaran_id', tpId),
   ])
   const badgeKeSprintNomor = {}
