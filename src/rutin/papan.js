@@ -18,7 +18,7 @@ import { sb } from '../lib/supabase.js'
  * (karena query Supabase sekali pakai). Contoh:
  *   ambilSemua(() => sb.from('t').select('*').eq('x', 1))
  */
-async function ambilSemua(buatQuery) {
+export async function ambilSemua(buatQuery) {
   const UKURAN = 1000
   let mulai = 0
   const semua = []

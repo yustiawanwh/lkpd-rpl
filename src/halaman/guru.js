@@ -11,6 +11,7 @@ import { halamanLkpd, halamanSuntingLkpd } from './kelola-lkpd.js'
 import { halamanNilai } from './nilai.js'
 import { halamanPengawasan } from './pengawasan.js'
 import { halamanDashboard } from './dashboard.js'
+import { ambilSemua } from '../rutin/papan.js'
 import { jarakSidik } from './tiket.js'
 import { urlBukti } from '../lib/bukti.js'
 
@@ -416,7 +417,7 @@ async function detilKelas(wadah, kelasId) {
       ])
       sprints = s ?? []
       tenggatSprint = pen?.tenggat_sprint ?? {}
-    } catch (_) {}
+    } catch (err) { roti('Gagal memuat data sprint: ' + pesanGalat(err), '⚠') }
 
     const fMulai = el('input', { type: 'date', value: p.mulai ? String(p.mulai).slice(0, 10) : '' })
     const fTenggat = el('input', { type: 'datetime-local', value: keLokal(p.tenggat) })
@@ -488,7 +489,7 @@ async function detilKelas(wadah, kelasId) {
       murid = (pend ?? []).sort((a, b) =>
         (a.profil?.no_absen ?? '').localeCompare(b.profil?.no_absen ?? '', undefined, { numeric: true }))
       adaKel = kel ?? []
-    } catch (_) {}
+    } catch (err) { roti('Gagal memuat data murid: ' + pesanGalat(err), '⚠') }
 
     if (!sprints.length) { roti('TP ini belum punya sprint', '⚠'); return }
 
@@ -1193,21 +1194,27 @@ function kartuArsip(p, penugasanId, wadah, miripNama = null) {
 async function muridMirip(penugasanId, kelasId) {
   const peta = new Map()   // progres_tugas_id -> Set<nama lawan>
   try {
-    const [{ data: lampiran }, { data: isian }, { data: pendaftaran }, { data: progres }] =
-      await Promise.all([
-        sb.from('lampiran')
-          .select('murid_id, sidik, progres_tugas_id, progres_tugas:progres_tugas_id(penugasan_id)')
-          .not('sidik', 'is', null),
-        sb.from('isian_lembar')
-          .select('murid_id, lembar_kerja_id, data, lembar:lembar_kerja_id(kode)')
-          .eq('penugasan_id', penugasanId),
-        sb.from('pendaftaran')
-          .select('murid_id, profil:murid_id(nama)')
-          .eq('kelas_id', kelasId).eq('aktif', true),
-        sb.from('progres_tugas')
-          .select('id, murid_id, tugas:tugas_id(lembar_kode)')
-          .eq('penugasan_id', penugasanId),
-      ])
+    // Ambil dulu id progres penugasan ini, lalu saring lampiran dengan .in()
+    // (lebih pasti daripada filter embedded, dan tetap hemat egress).
+    const progres = await ambilSemua(() => sb.from('progres_tugas')
+      .select('id, murid_id, tugas:tugas_id(lembar_kode)')
+      .eq('penugasan_id', penugasanId))
+    const idProgres = (progres ?? []).map(p => p.id)
+
+    const [lampiran, isian, pendaftaran] = await Promise.all([
+      idProgres.length
+        ? ambilSemua(() => sb.from('lampiran')
+            .select('murid_id, sidik, progres_tugas_id')
+            .in('progres_tugas_id', idProgres)
+            .not('sidik', 'is', null))
+        : Promise.resolve([]),
+      ambilSemua(() => sb.from('isian_lembar')
+        .select('murid_id, lembar_kerja_id, data, lembar:lembar_kerja_id(kode)')
+        .eq('penugasan_id', penugasanId)),
+      ambilSemua(() => sb.from('pendaftaran')
+        .select('murid_id, profil:murid_id(nama)')
+        .eq('kelas_id', kelasId).eq('aktif', true)),
+    ])
 
     const nama = {}
     for (const d of (pendaftaran ?? [])) nama[d.murid_id] = d.profil?.nama ?? '—'
@@ -1220,8 +1227,7 @@ async function muridMirip(penugasanId, kelasId) {
     }
 
     // 1. Gambar: jarak Hamming <= 8. Tiap lampiran punya progres_tugas_id → kartu.
-    const L = (lampiran ?? []).filter(l => l.sidik &&
-      l.progres_tugas?.penugasan_id === penugasanId)
+    const L = (lampiran ?? []).filter(l => l.sidik)
     for (let i = 0; i < L.length; i++) {
       for (let j = i + 1; j < L.length; j++) {
         if (L[i].murid_id === L[j].murid_id) continue
@@ -1293,17 +1299,33 @@ async function halamanKemiripan(wadah, penugasanId) {
     el('p', { gaya: { color: 'var(--tinta-lembut)' } }, 'Memeriksa kemiripan…'))))
 
   // Ambil bukti gambar (dengan sidik) + isian tabel, beserta nama murid.
-  const [{ data: lampiran }, { data: isian }, { data: pendaftaran }] = await Promise.all([
-    sb.from('lampiran')
-      .select('murid_id, path, sidik, progres_tugas:progres_tugas_id(tugas:tugas_id(kode))')
-      .not('sidik', 'is', null),
-    sb.from('isian_lembar')
+  // Hanya penugasan INI (hemat egress, tak terpotong 1000 baris).
+  // Ambil id progres penugasan ini dulu, lalu saring lampiran dengan .in().
+  const progresPen = await ambilSemua(() => sb.from('progres_tugas')
+    .select('id, tugas:tugas_id(kode)')
+    .eq('penugasan_id', penugasanId))
+  const kodeTugasProgres = {}
+  for (const p of (progresPen ?? [])) kodeTugasProgres[p.id] = p.tugas?.kode ?? ''
+  const idProgres = (progresPen ?? []).map(p => p.id)
+
+  const [lampiran, isian, pendaftaran] = await Promise.all([
+    idProgres.length
+      ? ambilSemua(() => sb.from('lampiran')
+          .select('murid_id, path, sidik, progres_tugas_id')
+          .in('progres_tugas_id', idProgres)
+          .not('sidik', 'is', null))
+      : Promise.resolve([]),
+    ambilSemua(() => sb.from('isian_lembar')
       .select('murid_id, lembar_kerja_id, data, lembar_kerja:lembar_kerja_id(kode)')
-      .eq('penugasan_id', penugasanId),
-    sb.from('pendaftaran')
+      .eq('penugasan_id', penugasanId)),
+    ambilSemua(() => sb.from('pendaftaran')
       .select('murid_id, profil:murid_id(nama, no_absen)')
-      .eq('kelas_id', pen.kelas_id).eq('aktif', true),
+      .eq('kelas_id', pen.kelas_id).eq('aktif', true)),
   ])
+  // Sisipkan kode tugas ke tiap lampiran (untuk tampilan), gantikan embed lama.
+  for (const l of (lampiran ?? [])) {
+    l.progres_tugas = { tugas: { kode: kodeTugasProgres[l.progres_tugas_id] ?? '' } }
+  }
 
   const nama = {}
   for (const d of (pendaftaran ?? [])) nama[d.murid_id] = d.profil?.nama ?? '—'

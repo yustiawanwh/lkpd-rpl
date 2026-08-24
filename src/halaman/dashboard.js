@@ -10,6 +10,7 @@ import { sb } from '../lib/supabase.js'
 import { el, isi, rangkaMuat, inisial } from '../lib/dom.js'
 import { pesanGalat } from '../lib/kesalahan.js'
 import { keadaan, pergiKe } from '../main.js'
+import { ambilSemua } from '../rutin/papan.js'
 
 export async function halamanDashboard(wadah) {
   isi(wadah, el('div', { class: 'tumpuk' }, rangkaMuat('120px'), rangkaMuat('220px')))
@@ -45,14 +46,14 @@ export async function halamanDashboard(wadah) {
 
   let progres = [], stat = [], daftar = [], tugasInti = []
   try {
-    const [rp, rs, rd, rt] = await Promise.all([
-      sb.from('progres_tugas').select('penugasan_id, murid_id, tugas_id, status, nilai_huruf').in('penugasan_id', penIds),
-      sb.from('statistik_murid').select('penugasan_id, murid_id, total_xp, jumlah_badge, tugas_selesai, total_detik, profil:murid_id(nama, no_absen)').in('penugasan_id', penIds),
-      sb.from('pendaftaran').select('kelas_id, murid_id, denyut_pada, profil:murid_id(nama, no_absen)').in('kelas_id', penugasan.map(p => p.kelas_id)),
+    const [progresD, statD, daftarD, rt] = await Promise.all([
+      ambilSemua(() => sb.from('progres_tugas').select('penugasan_id, murid_id, tugas_id, status, nilai_huruf').in('penugasan_id', penIds)),
+      ambilSemua(() => sb.from('statistik_murid').select('penugasan_id, murid_id, total_xp, jumlah_badge, tugas_selesai, total_detik, profil:murid_id(nama, no_absen)').in('penugasan_id', penIds)),
+      ambilSemua(() => sb.from('pendaftaran').select('kelas_id, murid_id, denyut_pada, profil:murid_id(nama, no_absen)').in('kelas_id', penugasan.map(p => p.kelas_id))),
       sb.from('sprint').select('id, tujuan_pembelajaran_id, tugas(id, jenis)').in('tujuan_pembelajaran_id', tpIds),
     ])
-    if (rp.error) throw rp.error
-    progres = rp.data ?? []; stat = rs.data ?? []; daftar = rd.data ?? []; tugasInti = rt.data ?? []
+    if (rt.error) throw rt.error
+    progres = progresD ?? []; stat = statD ?? []; daftar = daftarD ?? []; tugasInti = rt.data ?? []
   } catch (err) {
     isi(wadah, el('div', { class: 'pesan pesan-galat' }, pesanGalat(err))); return
   }

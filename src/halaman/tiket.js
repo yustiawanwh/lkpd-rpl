@@ -288,9 +288,13 @@ export function dialogTiket(tugas, saatBerubah) {
     })
     if (!ya) return
     try {
-      await hapusBukti(item.path)   // R2 atau Supabase sesuai path
+      // Hapus baris DB DULU (sumber kebenaran). Bila ini gagal, berkas tak
+      // jadi dihapus → tak ada rujukan rusak. Bila berhasil, baru hapus berkas;
+      // andai penghapusan berkas gagal, hanya menyisakan berkas yatim (tak
+      // tampil, tak merusak apa pun).
       const { error } = await sb.from('lampiran').delete().eq('id', item.id)
       if (error) throw error
+      await hapusBukti(item.path)   // server file / Supabase sesuai path
       daftarBukti = daftarBukti.filter(x => x.id !== item.id)
       perbaruiKotakBukti()
       gambarGaleri()
@@ -308,7 +312,7 @@ export function dialogTiket(tugas, saatBerubah) {
           kartu.append(el('img', { class: 'bukti-gambar', src,
                                     alt: 'Bukti ' + tugas.kode }))
         }
-      } catch {}
+      } catch { /* satu gambar gagal dimuat → lewati, jangan gagalkan galeri */ }
       if (!terkunci) {
         kartu.append(el('button', { class: 'bukti-hapus', title: 'Hapus bukti',
           onClick: () => hapusBukti(item) }, '✕'))
@@ -539,7 +543,7 @@ export function dialogTiket(tugas, saatBerubah) {
         // Kunci juga isian tabel bila sudah termuat.
         if (tabelIsiApi?.setBacaSaja) tabelIsiApi.setBacaSaja(true)
       }
-    } catch (_) {}
+    } catch (_) { /* gagal cek status kunci sprint → biarkan tak terkunci */ }
   })()
 
   // Muat semua bukti yang sudah ada
@@ -551,7 +555,7 @@ export function dialogTiket(tugas, saatBerubah) {
       daftarBukti = data ?? []
       perbaruiKotakBukti()
       gambarGaleri()
-    } catch {}
+    } catch (err) { roti('Gagal memuat bukti: ' + pesanGalat(err), '⚠') }
   })()
 
   return tutup
