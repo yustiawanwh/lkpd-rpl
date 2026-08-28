@@ -9,6 +9,7 @@ import { keadaan, pergiKe, keluar } from '../main.js'
 import { halamanPengaturan, halamanPengguna } from './kelola.js'
 import { halamanLkpd, halamanSuntingLkpd } from './kelola-lkpd.js'
 import { halamanNilai } from './nilai.js'
+import { halamanTigaRanah } from './ranah-nilai.js'
 import { halamanPengawasan } from './pengawasan.js'
 import { halamanDashboard } from './dashboard.js'
 import { ambilSemua } from '../rutin/papan.js'
@@ -29,6 +30,7 @@ export async function halamanGuru(wadah, r) {
     else if (tampilan === 'arsip' && r.bagian[0]) await arsipDinilai(utama, Number(r.bagian[0]))
     else if (tampilan === 'mirip' && r.bagian[0]) await halamanKemiripan(utama, Number(r.bagian[0]))
     else if (tampilan === 'rekap' && r.bagian[0]) await halamanNilai(utama, Number(r.bagian[0]))
+    else if (tampilan === 'ranah' && r.bagian[0]) await halamanTigaRanah(utama, Number(r.bagian[0]))
     else if (tampilan === 'awasi' && r.bagian[0]) await halamanPengawasan(utama, Number(r.bagian[0]))
     else if (tampilan === 'dashboard') await halamanDashboard(utama)
     else if (tampilan === 'pengaturan') await halamanPengaturan(utama)
@@ -332,6 +334,8 @@ async function detilKelas(wadah, kelasId) {
                              onClick: () => pergiKe(`mirip/${p.id}`) }, '🔍 Kemiripan'),
               el('button', { class: 'tbl tbl-kecil',
                              onClick: () => pergiKe(`rekap/${p.id}`) }, 'Nilai'),
+              el('button', { class: 'tbl tbl-kecil',
+                             onClick: () => pergiKe(`ranah/${p.id}`) }, '📊 Tiga Ranah'),
               el('button', { class: 'tbl tbl-kecil tbl-bahaya',
                              onClick: () => hapusPenugasan(p) }, 'Hapus'),
             ),
@@ -919,74 +923,128 @@ async function antreanReview(wadah, penugasanId) {
     .order('diserahkan_pada')
   if (error) throw error
 
-  // Kelompokkan per murid. Di dalam tiap murid, urut tugas dari sprint
-  // terkecil → terbesar (lalu urutan tugas). Antar murid: yang paling lama
-  // menunggu (tugas tertua) di paling atas.
-  const petaMurid = new Map()
-  for (const p of data) {
-    if (!petaMurid.has(p.murid_id)) {
-      petaMurid.set(p.murid_id, { murid_id: p.murid_id, profil: p.profil, tugas: [] })
-    }
-    petaMurid.get(p.murid_id).tugas.push(p)
-  }
-  const kelompok = [...petaMurid.values()]
-  for (const k of kelompok) {
-    k.tugas.sort((a, b) =>
-      (a.tugas?.sprint?.nomor ?? 0) - (b.tugas?.sprint?.nomor ?? 0)
-      || (a.tugas?.urutan ?? 0) - (b.tugas?.urutan ?? 0)
-      || (a.tugas?.kode ?? '').localeCompare(b.tugas?.kode ?? ''))
-  }
-  // Antar murid: urut berdasarkan NOMOR ABSEN agar urutannya tetap
-  // (tidak berubah-ubah setelah tugas dinilai). Absen numerik diurut
-  // sebagai angka; bila kosong, ditaruh di bawah.
-  const nomorAbsen = (k) => {
-    const a = k.profil?.no_absen
+  // Penanda kemiripan: himpunan id murid dengan bukti/isian sangat mirip.
+  const miripSet = await muridMirip(penugasanId, pen?.kelas_id)
+
+  // Absen numerik (untuk pengurutan); kosong ditaruh di bawah.
+  const nomorAbsen = (profil) => {
+    const a = profil?.no_absen
     if (a == null || a === '') return Infinity
     const n = parseInt(a, 10)
     return Number.isNaN(n) ? Infinity : n
   }
-  kelompok.sort((a, b) =>
-    nomorAbsen(a) - nomorAbsen(b)
-    || (a.profil?.no_absen ?? '').localeCompare(b.profil?.no_absen ?? '')
-    || (a.profil?.nama ?? '').localeCompare(b.profil?.nama ?? ''))
 
-  // Penanda kemiripan: himpunan id murid dengan bukti/isian sangat mirip.
-  const miripSet = await muridMirip(penugasanId, pen?.kelas_id)
+  // Mode tampilan tersimpan agar konsisten antar kunjungan.
+  let mode = localStorage.getItem('review_mode') || 'murid'   // 'murid' | 'tugas'
 
-  isi(wadah,
-    el('div', { class: 'kepala' },
-      el('div', {},
-        el('button', { class: 'tbl tbl-kecil tbl-hantu', gaya: { padding: '2px 0', marginBottom: '4px' },
-                       onClick: () => pergiKe(`kelas/${pen.kelas_id}`) }, '← Kembali ke kelas'),
-        el('h1', {}, 'Menunggu review'),
-        el('p', { id: 'review-hitung' }, `${pen.kelas?.nama} · ${pen.tujuan_pembelajaran?.kode}` +
-                    (data.length ? ` — ${data.length} tugas dari ${kelompok.length} murid` : '')),
-      ),
-    ),
-
-    data.length
-      ? el('div', { class: 'tumpuk-murid' }, ...kelompok.map(k =>
-          el('div', { class: 'grup-murid' },
-            el('div', { class: 'grup-murid-kepala' },
-              el('span', { class: 'avatar', gaya: { width: '30px', height: '30px', fontSize: '11px' } },
-                inisial(k.profil?.nama)),
-              el('div', {},
-                el('div', { gaya: { fontWeight: '600', fontSize: '14px' } }, k.profil?.nama ?? '—'),
-                el('div', { gaya: { fontSize: '11.5px', color: 'var(--tinta-lembut)' } },
-                  (k.profil?.no_absen ? `Absen ${k.profil.no_absen} · ` : '') +
-                  `${k.tugas.length} tugas menunggu`)),
-            ),
-            el('div', { class: 'tumpuk' }, ...k.tugas.map(p => kartuReview(p, penugasanId, wadah, miripSet.get(p.id)))),
-          )))
-      : el('div', { class: 'panel' }, el('div', { class: 'kosong' },
-          el('h3', {}, 'Tidak ada yang menunggu'),
-          el('p', {}, 'Semua pekerjaan murid sudah diperiksa.'))),
-  )
-
-  // Muat hasil pekerjaan murid (unggahan + isian tabel) ke tiap kartu.
-  for (const p of data) {
-    muatKoreksi(p, pen?.tujuan_pembelajaran?.id, penugasanId)
+  // ---- Susunan A: PER MURID (urut absen; di dalamnya urut sprint→tugas) ----
+  function susunPerMurid() {
+    const peta = new Map()
+    for (const p of data) {
+      if (!peta.has(p.murid_id)) peta.set(p.murid_id, { profil: p.profil, tugas: [] })
+      peta.get(p.murid_id).tugas.push(p)
+    }
+    const grup = [...peta.values()]
+    for (const g of grup) {
+      g.tugas.sort((a, b) =>
+        (a.tugas?.sprint?.nomor ?? 0) - (b.tugas?.sprint?.nomor ?? 0)
+        || (a.tugas?.urutan ?? 0) - (b.tugas?.urutan ?? 0)
+        || (a.tugas?.kode ?? '').localeCompare(b.tugas?.kode ?? ''))
+    }
+    grup.sort((a, b) =>
+      nomorAbsen(a.profil) - nomorAbsen(b.profil)
+      || (a.profil?.no_absen ?? '').localeCompare(b.profil?.no_absen ?? '')
+      || (a.profil?.nama ?? '').localeCompare(b.profil?.nama ?? ''))
+    return grup
   }
+
+  // ---- Susunan B: PER TUGAS (urut sprint→tugas; di dalamnya urut absen) ----
+  function susunPerTugas() {
+    const peta = new Map()
+    for (const p of data) {
+      const kunci = p.tugas_id
+      if (!peta.has(kunci)) peta.set(kunci, { tugas: p.tugas, tugas_id: kunci, murid: [] })
+      peta.get(kunci).murid.push(p)
+    }
+    const grup = [...peta.values()]
+    for (const g of grup) {
+      g.murid.sort((a, b) =>
+        nomorAbsen(a.profil) - nomorAbsen(b.profil)
+        || (a.profil?.no_absen ?? '').localeCompare(b.profil?.no_absen ?? '')
+        || (a.profil?.nama ?? '').localeCompare(b.profil?.nama ?? ''))
+    }
+    grup.sort((a, b) =>
+      (a.tugas?.sprint?.nomor ?? 0) - (b.tugas?.sprint?.nomor ?? 0)
+      || (a.tugas?.urutan ?? 0) - (b.tugas?.urutan ?? 0)
+      || (a.tugas?.kode ?? '').localeCompare(b.tugas?.kode ?? ''))
+    return grup
+  }
+
+  const jmlMurid = new Set(data.map(p => p.murid_id)).size
+
+  function gambar() {
+    const tombolMode = (nilai, label) => el('button', {
+      class: 'tbl tbl-kecil' + (mode === nilai ? ' tbl-utama' : ''),
+      onClick: () => { if (mode !== nilai) { mode = nilai; localStorage.setItem('review_mode', nilai); gambar() } },
+    }, label)
+
+    isi(wadah,
+      el('div', { class: 'kepala' },
+        el('div', {},
+          el('button', { class: 'tbl tbl-kecil tbl-hantu', gaya: { padding: '2px 0', marginBottom: '4px' },
+                         onClick: () => pergiKe(`kelas/${pen.kelas_id}`) }, '← Kembali ke kelas'),
+          el('h1', {}, 'Menunggu review'),
+          el('p', { id: 'review-hitung' }, `${pen.kelas?.nama} · ${pen.tujuan_pembelajaran?.kode}` +
+                      (data.length ? ` — ${data.length} tugas dari ${jmlMurid} murid` : '')),
+        ),
+        data.length ? el('div', { class: 'kepala-kanan' },
+          el('div', { gaya: { display: 'flex', gap: '4px', alignItems: 'center' } },
+            el('span', { gaya: { fontSize: '12px', color: 'var(--tinta-lembut)', marginRight: '2px' } }, 'Kelompokkan:'),
+            tombolMode('murid', 'Per Murid'),
+            tombolMode('tugas', 'Per Tugas'))) : null,
+      ),
+
+      !data.length
+        ? el('div', { class: 'panel' }, el('div', { class: 'kosong' },
+            el('h3', {}, 'Tidak ada yang menunggu'),
+            el('p', {}, 'Semua pekerjaan murid sudah diperiksa.')))
+        : mode === 'murid'
+          ? el('div', { class: 'tumpuk-murid' }, ...susunPerMurid().map(g =>
+              el('div', { class: 'grup-murid' },
+                el('div', { class: 'grup-murid-kepala' },
+                  el('span', { class: 'avatar', gaya: { width: '30px', height: '30px', fontSize: '11px' } },
+                    inisial(g.profil?.nama)),
+                  el('div', {},
+                    el('div', { gaya: { fontWeight: '600', fontSize: '14px' } }, g.profil?.nama ?? '—'),
+                    el('div', { gaya: { fontSize: '11.5px', color: 'var(--tinta-lembut)' } },
+                      (g.profil?.no_absen ? `Absen ${g.profil.no_absen} · ` : '') +
+                      `${g.tugas.length} tugas menunggu`)),
+                ),
+                el('div', { class: 'tumpuk' }, ...g.tugas.map(p => kartuReview(p, penugasanId, wadah, miripSet.get(p.id)))),
+              )))
+          : el('div', { class: 'tumpuk-murid' }, ...susunPerTugas().map(g =>
+              el('div', { class: 'grup-murid' },
+                el('div', { class: 'grup-murid-kepala' },
+                  el('span', { class: 'avatar avatar-tugas', gaya: { width: '30px', height: '30px', fontSize: '10px' } },
+                    (g.tugas?.kode ?? '?').split('-').pop()),
+                  el('div', {},
+                    el('div', { gaya: { fontWeight: '600', fontSize: '14px' } },
+                      `${g.tugas?.kode ?? '—'} — ${g.tugas?.judul ?? ''}`),
+                    el('div', { gaya: { fontSize: '11.5px', color: 'var(--tinta-lembut)' } },
+                      (g.tugas?.sprint?.nomor != null ? `Sprint ${g.tugas.sprint.nomor} · ` : '') +
+                      `${g.murid.length} murid menunggu`)),
+                ),
+                el('div', { class: 'tumpuk' }, ...g.murid.map(p => kartuReview(p, penugasanId, wadah, miripSet.get(p.id)))),
+              ))),
+    )
+
+    // Muat hasil pekerjaan murid (unggahan + isian tabel) ke tiap kartu.
+    for (const p of data) {
+      muatKoreksi(p, pen?.tujuan_pembelajaran?.id, penugasanId)
+    }
+  }
+
+  gambar()
 }
 
 // Poin 6: arsip pekerjaan murid yang SUDAH dinilai. Guru tetap bisa melihat
@@ -1120,7 +1178,7 @@ function kartuMuridArsip(k, penugasanId, tpId, wadah, miripMap = null) {
 function kartuArsip(p, penugasanId, wadah, miripNama = null) {
   const mirip = miripNama && miripNama.size > 0
   const LABEL = { A: 'Sempurna', B: 'Bagus', C: 'Cukup', D: 'Kurang', E: 'Tidak lulus' }
-  const umpan = el('textarea', { rows: '2', 'aria-label': 'Ubah umpan balik',
+  const umpan = el('textarea', { rows: '2', class: 'umpan-review', 'aria-label': 'Ubah umpan balik',
     placeholder: 'Ubah umpan balik (opsional)' }, p.umpan_balik ?? '')
 
   async function beriNilaiUlang(huruf) {
@@ -1541,7 +1599,7 @@ function tabelKoreksi(lembar, data) {
 
 function kartuReview(p, penugasanId, wadah, miripNama = null) {
   const mirip = miripNama && miripNama.size > 0
-  const umpan = el('textarea', { rows: '2', 'aria-label': 'Umpan balik',
+  const umpan = el('textarea', { rows: '2', class: 'umpan-review', 'aria-label': 'Umpan balik',
     placeholder: 'Umpan balik untuk murid (opsional saat menilai, wajib bila dikembalikan)' })
 
   // Hapus HANYA kartu ini dari DOM (tanpa memuat ulang seluruh halaman/gambar).
@@ -1552,10 +1610,13 @@ function kartuReview(p, penugasanId, wadah, miripNama = null) {
     if (grup && !grup.querySelector('.panel')) {
       grup.remove()
     } else if (grup) {
-      // Perbarui hitungan "N tugas menunggu" pada grup murid ini.
+      // Perbarui hitungan pada kepala grup (baik "N tugas" mode murid,
+      // maupun "N murid" mode per tugas).
       const sisa = grup.querySelectorAll('.panel').length
       const ket = grup.querySelector('.grup-murid-kepala div div:last-child')
-      if (ket) ket.textContent = ket.textContent.replace(/\d+ tugas menunggu/, `${sisa} tugas menunggu`)
+      if (ket) ket.textContent = ket.textContent
+        .replace(/\d+ tugas menunggu/, `${sisa} tugas menunggu`)
+        .replace(/\d+ murid menunggu/, `${sisa} murid menunggu`)
     }
     // Perbarui hitungan di kepala halaman berdasarkan DOM terkini.
     const kartuSisa = wadah.querySelectorAll('.tumpuk-murid .panel').length

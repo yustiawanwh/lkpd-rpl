@@ -805,3 +805,25 @@ body.anti-salin-aktif [contenteditable="true"]{-webkit-user-select:text;-moz-use
 .anti-salin-baris{display:flex;align-items:center;gap:9px;margin-top:12px;
   font-size:14px;cursor:pointer}
 .anti-salin-baris input{width:17px;height:17px;cursor:pointer}
+
+/* Avatar kepala grup saat review dikelompokkan PER TUGAS (bukan per murid) */
+.avatar-tugas{background:#e3ecf7;color:#2f5c9e;font-weight:700;letter-spacing:.02em}
+
+/* Kolom umpan balik di kartu review — penuh selebar kartu & responsif */
+.umpan-review{
+  display:block;
+  width:100%;
+  box-sizing:border-box;
+  min-height:64px;
+  padding:10px 12px;
+  border:1px solid var(--garis-tegas);
+  border-radius:var(--lengkung);
+  background:var(--putih);
+  resize:vertical;
+  line-height:1.5;
+}
+.umpan-review:focus{
+  outline:none;
+  border-color:var(--hijau-terang);
+  box-shadow:0 0 0 3px var(--hijau-lembut);
+}

@@ -472,6 +472,8 @@ function dialogTugas(wadah, tpId, sprint, t = null) {
     el('option', { value: v, selected: (t?.jenis ?? 'inti') === v }, l)))
   const fLevel = el('select', {}, ...[['','—'],['1','Level 1'],['2','Level 2'],['3','Level 3']].map(([v,l]) =>
     el('option', { value: v, selected: String(t?.level ?? '') === v }, l)))
+  const fRanah = el('select', {}, ...[['','— Tidak dihitung —'],['kognitif','Kognitif (pengetahuan)'],['psikomotor','Psikomotor (keterampilan)']].map(([v,l]) =>
+    el('option', { value: v, selected: (t?.ranah ?? '') === v }, l)))
   const fMenit = el('input', { type: 'number', min: '0', placeholder: '50', value: t?.estimasi_menit ?? '' })
   const fXp = el('input', { type: 'number', min: '0', placeholder: '25', value: t?.xp ?? '' })
   const fBukti = el('input', { type: 'text', placeholder: 'Tabel A terisi lengkap', value: t?.bukti_diminta ?? '' })
@@ -506,6 +508,7 @@ function dialogTugas(wadah, tpId, sprint, t = null) {
       xp: fXp.value ? Number(fXp.value) : 0,
       bukti_diminta: fBukti.value.trim() || null,
       lembar_kode: fLembar.value.trim().toUpperCase() || null,
+      ranah: fRanah.value || null,
       deskripsi: fDesk.get().trim() || null,
       wajib_bukti: fWajib.checked,
       urutan: t?.urutan ?? (sprint.tugas?.length ?? 0) + 1,
@@ -531,6 +534,12 @@ function dialogTugas(wadah, tpId, sprint, t = null) {
         el('div', { class: 'ruas' }, el('label', {}, 'Kode (unik)'), fKode),
         el('div', { class: 'ruas' }, el('label', {}, 'Jenis'), fJenis)),
       barisLevel,
+      el('div', { class: 'ruas' },
+        el('label', {}, 'Ranah penilaian (K13)'),
+        fRanah,
+        el('div', { gaya: { fontSize: '11.5px', color: 'var(--tinta-lembut)', marginTop: '3px' } },
+          'Menentukan tugas ini masuk nilai Kognitif atau Psikomotor di laporan tiga ranah. ' +
+          'Kosongkan bila tak ingin dihitung. Afektif dihitung otomatis dari kedisiplinan.')),
       el('div', { class: 'ruas' }, el('label', {}, 'Judul'), fJudul),
       el('div', { class: 'ruas' }, el('label', {}, 'Deskripsi'), fDesk.el),
       el('p', { class: 'format-bantuan' },
