@@ -343,7 +343,7 @@ export async function rekapTigaRanah(penugasanId, tpId, nilaiTelat = KETEPATAN_T
   let totalTugas = 0
   for (const s of (sprintTugas ?? [])) {
     for (const t of (s.tugas ?? [])) {
-      infoTugas[t.id] = { ranah: t.ranah ?? null, estimasi_menit: t.estimasi_menit ?? 0, sprint_id: s.id }
+      infoTugas[t.id] = { ranah: t.ranah ?? null, estimasi_menit: t.estimasi_menit ?? 0, sprint_id: s.id, jenis: t.jenis }
       totalTugas++
     }
   }
@@ -395,9 +395,12 @@ export async function rekapTigaRanah(penugasanId, tpId, nilaiTelat = KETEPATAN_T
 
   // 3. Kelompokkan per murid.
   const tugasSudahWaktunya = new Set()
-  // Daftar tugas per ranah (untuk mengecek yang belum dikerjakan tapi lewat tenggat).
+  // Daftar tugas per ranah untuk dihitung: HANYA tugas INTI (konsisten dengan
+  // rekap nilai per sprint). Tugas tantangan/tutor bersifat opsional, jadi tak
+  // dihitung ke kognitif/psikomotor — murid tak dihukum bila tak mengerjakannya.
   const tugasKognitif = [], tugasPsikomotor = []
   for (const [id, info] of Object.entries(infoTugas)) {
+    if (info.jenis !== 'inti') continue
     if (info.ranah === 'kognitif') tugasKognitif.push(Number(id))
     else if (info.ranah === 'psikomotor') tugasPsikomotor.push(Number(id))
   }
