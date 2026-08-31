@@ -8,16 +8,9 @@
  * Semua nilai berskala 0..100. Perhitungan MURNI dari data yang sudah ada —
  * tidak memerlukan penilaian manual tambahan dari guru.
  *
- * Sumber kebenaran huruf → angka mengikuti lib/nilai.js (A=100 dst).
+ * Kognitif & Psikomotor dihitung di rutin/papan.js (termasuk aturan lewat
+ * tenggat = 0), lalu diteruskan lewat hitungTigaRanah.
  */
-import { NILAI_HURUF } from './nilai.js'
-
-// Rata-rata angka dari daftar huruf. Kosong → null (belum ada nilai).
-function rataHuruf(hurufList) {
-  if (!hurufList || hurufList.length === 0) return null
-  const jml = hurufList.reduce((n, h) => n + (NILAI_HURUF[h] ?? 0), 0)
-  return Math.round(jml / hurufList.length)
-}
 
 /**
  * Hitung tiga ranah untuk SATU murid.
@@ -31,17 +24,12 @@ function rataHuruf(hurufList) {
  * @returns { kognitif, psikomotor, afektif, rincianAfektif }
  */
 export function hitungTigaRanah(arg, bobotAfektif = BOBOT_AFEKTIF_BAWAAN) {
-  const kognitif = rataHuruf(arg.hurufKognitif)
-  const psikomotor = rataHuruf(arg.hurufPsikomotor)
+  // Kognitif & Psikomotor sudah dihitung di rekapTigaRanah (termasuk aturan
+  // "belum dikerjakan tapi lewat tenggat = 0"), jadi tinggal diteruskan.
+  const kognitif = arg.kognitif ?? null
+  const psikomotor = arg.psikomotor ?? null
 
-  // Afektif mengukur SIKAP/KEDISIPLINAN. Komponen:
-  //   - ketepatanKumpul : nilai dari JARAK waktu kumpul terhadap tenggat.
-  //       Kumpul awal → mendekati 95, mepet → 75, telat → nilai tetap (batas
-  //       bawah). Sudah berskala akhir (bukan proporsi), jadi TIDAK dipetakan
-  //       ulang lewat baseline. Dihitung di rutin/papan.js.
-  //   - keaktifan     : keterlibatan (tugas dikerjakan dari yang sudah waktunya)
-  //   - badgeDisiplin : bonus opsional
-  // Ketiga komponen digabung sebagai rata-rata tertimbang langsung (0..100).
+  // Afektif: gabungan ketepatan pengumpulan + keaktifan + bonus badge.
   const a = arg.afektif ?? {}
   const komponen = [
     ['ketepatanKumpul', a.ketepatanKumpul, bobotAfektif.ketepatanKumpul],

@@ -40,7 +40,7 @@ export async function halamanTigaRanah(wadah, penugasanId) {
   // Hitung tiga ranah tiap murid, urut nomor absen.
   const baris = rekap.murid.map(m => {
     const r = hitungTigaRanah({
-      hurufKognitif: m.hurufKognitif, hurufPsikomotor: m.hurufPsikomotor, afektif: m.afektif,
+      kognitif: m.kognitif, psikomotor: m.psikomotor, afektif: m.afektif,
     })
     return { ...m, ...r }
   }).sort((a, b) => {

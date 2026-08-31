@@ -8,6 +8,7 @@
  */
 import { sb } from '../lib/supabase.js'
 import { nilaiKetepatanKumpul, KETEPATAN_TELAT_BAWAAN } from '../lib/ranah.js'
+import { NILAI_HURUF } from '../lib/nilai.js'
 
 /**
  * Ambil SEMUA baris dari sebuah query Supabase, melewati batas default
@@ -334,22 +335,22 @@ export async function rekapNilaiPerSprint(penugasanId, tpId) {
  *   afektif:{...} }] }. Perhitungan angka dilakukan di lib/ranah.js.
  */
 export async function rekapTigaRanah(penugasanId, tpId, nilaiTelat = KETEPATAN_TELAT_BAWAAN) {
-  // 1. Tugas TP ini + ranah, estimasi (untuk ketepatan waktu). Semua sprint.
+  // 1. Tugas TP ini + ranah + sprint (untuk cek tenggat per sprint). Semua sprint.
   const { data: sprintTugas } = await sb.from('sprint')
     .select('id, tugas(id, ranah, estimasi_menit, jenis)')
     .eq('tujuan_pembelajaran_id', tpId)
-  const infoTugas = {}   // tugas_id -> { ranah, estimasi_menit }
+  const infoTugas = {}   // tugas_id -> { ranah, estimasi_menit, sprint_id }
   let totalTugas = 0
   for (const s of (sprintTugas ?? [])) {
     for (const t of (s.tugas ?? [])) {
-      infoTugas[t.id] = { ranah: t.ranah ?? null, estimasi_menit: t.estimasi_menit ?? 0 }
+      infoTugas[t.id] = { ranah: t.ranah ?? null, estimasi_menit: t.estimasi_menit ?? 0, sprint_id: s.id }
       totalTugas++
     }
   }
 
-  // 2. Data penugasan (tenggat) + progres + badge disiplin.
+  // 2. Data penugasan (tenggat + tenggat_sprint) + progres + badge disiplin.
   const [{ data: pen }, progres, { data: badges }, { data: perolehanData }] = await Promise.all([
-    sb.from('penugasan').select('tenggat, mulai, dibuat_pada, kelas_id, tujuan_pembelajaran_id').eq('id', penugasanId).single(),
+    sb.from('penugasan').select('tenggat, tenggat_sprint, mulai, dibuat_pada, kelas_id, tujuan_pembelajaran_id').eq('id', penugasanId).single(),
     ambilSemua(() => sb.from('progres_tugas')
       .select('murid_id, tugas_id, status, nilai_huruf, diserahkan_pada, detik_terpakai, profil:murid_id(nama, no_absen)')
       .eq('penugasan_id', penugasanId)),
@@ -367,6 +368,21 @@ export async function rekapTigaRanah(penugasanId, tpId, nilaiTelat = KETEPATAN_T
     awalMs = new Date(pen.dibuat_pada).getTime()
   }
 
+  // Untuk Pilihan "belum dikerjakan = 0 HANYA bila lewat tenggat":
+  // tentukan apakah tenggat sebuah tugas SUDAH lewat (pakai tenggat sprint tugas
+  // itu bila ada, jika tidak pakai tenggat penugasan). Bila tak ada tenggat sama
+  // sekali → dianggap BELUM lewat (tak menghukum).
+  const tenggatSprint = pen?.tenggat_sprint ?? {}
+  const sekarang = Date.now()
+  function tenggatTugasLewat(tugas_id) {
+    const info = infoTugas[tugas_id]
+    if (!info) return false
+    const ts = tenggatSprint[String(info.sprint_id)]
+    const batas = ts ? new Date(ts).getTime() : tenggatMs
+    if (batas == null) return false        // tak ada tenggat → belum lewat
+    return sekarang > batas
+  }
+
   // Badge yang bersifat "disiplin" = syarat tepat_estimasi.
   const badgeDisiplin = new Set()
   for (const b of (badges ?? [])) {
@@ -378,16 +394,21 @@ export async function rekapTigaRanah(penugasanId, tpId, nilaiTelat = KETEPATAN_T
   }
 
   // 3. Kelompokkan per murid.
-  // "Sudah waktunya" = tugas yang SUDAH tersentuh kelas (ada murid yang mulai/
-  //   serahkan). Ini penyebut adil untuk keaktifan: tugas yang belum waktunya
-  //   (belum ada yang mengerjakan) tak menghukum murid.
   const tugasSudahWaktunya = new Set()
+  // Daftar tugas per ranah (untuk mengecek yang belum dikerjakan tapi lewat tenggat).
+  const tugasKognitif = [], tugasPsikomotor = []
+  for (const [id, info] of Object.entries(infoTugas)) {
+    if (info.ranah === 'kognitif') tugasKognitif.push(Number(id))
+    else if (info.ranah === 'psikomotor') tugasPsikomotor.push(Number(id))
+  }
+
   const peta = {}
   function pastikan(murid_id, profil) {
     if (!peta[murid_id]) {
       peta[murid_id] = {
         murid_id, profil,
-        hurufKognitif: [], hurufPsikomotor: [],
+        // Simpan nilai ANGKA tugas yang sudah dinilai, per ranah, keyed tugas_id.
+        nilaiKognitif: {}, nilaiPsikomotor: {},
         _dikerjakan: 0, _ketepatanSum: 0, _ketepatanN: 0,
       }
     }
@@ -402,10 +423,11 @@ export async function rekapTigaRanah(penugasanId, tpId, nilaiTelat = KETEPATAN_T
     // Tugas dianggap "sudah waktunya" bila ada aktivitas (bukan sekadar backlog).
     if (p.status && p.status !== 'backlog') tugasSudahWaktunya.add(p.tugas_id)
 
-    // Kognitif / Psikomotor: kumpulkan huruf sesuai ranah (bila sudah dinilai).
+    // Kognitif / Psikomotor: simpan nilai ANGKA tugas yang sudah dinilai.
     if (p.nilai_huruf) {
-      if (info.ranah === 'kognitif') m.hurufKognitif.push(p.nilai_huruf)
-      else if (info.ranah === 'psikomotor') m.hurufPsikomotor.push(p.nilai_huruf)
+      const angka = NILAI_HURUF[p.nilai_huruf] ?? 0
+      if (info.ranah === 'kognitif') m.nilaiKognitif[p.tugas_id] = angka
+      else if (info.ranah === 'psikomotor') m.nilaiPsikomotor[p.tugas_id] = angka
     }
 
     // Keterlibatan (untuk afektif).
@@ -422,8 +444,29 @@ export async function rekapTigaRanah(penugasanId, tpId, nilaiTelat = KETEPATAN_T
   // Penyebut keaktifan: tugas yang SUDAH waktunya (bukan seluruh TP).
   const totalSudahWaktunya = tugasSudahWaktunya.size
 
-  // 4. Susun komponen afektif per murid.
+  // 4. Susun nilai ranah + komponen afektif per murid.
+  // Nilai ranah (kognitif/psikomotor): rata-rata nilai tugas ranah tsb, DI MANA
+  //   - tugas yang sudah dinilai → nilai angkanya
+  //   - tugas yang BELUM dinilai TAPI tenggatnya sudah LEWAT → dihitung 0
+  //   - tugas yang belum dinilai & tenggat belum lewat → TIDAK dihitung
+  // Bila tak ada satu pun tugas yang masuk hitungan → null ("—").
+  function nilaiRanah(daftarTugas, nilaiTerdinilai) {
+    let jml = 0, n = 0
+    for (const tid of daftarTugas) {
+      if (tid in nilaiTerdinilai) {          // sudah dinilai
+        jml += nilaiTerdinilai[tid]; n++
+      } else if (tenggatTugasLewat(tid)) {   // belum dinilai & lewat tenggat → 0
+        jml += 0; n++
+      }
+      // selain itu (belum dinilai & belum tenggat) → dilewati
+    }
+    return n > 0 ? Math.round(jml / n) : null
+  }
+
   const murid = Object.values(peta).map(m => {
+    const kognitif = nilaiRanah(tugasKognitif, m.nilaiKognitif)
+    const psikomotor = nilaiRanah(tugasPsikomotor, m.nilaiPsikomotor)
+
     // keaktifan: proporsi tugas dikerjakan dari tugas yang SUDAH waktunya.
     const keaktifan = totalSudahWaktunya > 0
       ? Math.min(100, Math.round((m._dikerjakan / totalSudahWaktunya) * 100)) : null
@@ -437,7 +480,7 @@ export async function rekapTigaRanah(penugasanId, tpId, nilaiTelat = KETEPATAN_T
 
     return {
       murid_id: m.murid_id, profil: m.profil,
-      hurufKognitif: m.hurufKognitif, hurufPsikomotor: m.hurufPsikomotor,
+      kognitif, psikomotor,
       afektif: { ketepatanKumpul, keaktifan, badgeDisiplin: skorBadge },
     }
   })
