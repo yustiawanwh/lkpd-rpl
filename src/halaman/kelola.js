@@ -20,19 +20,22 @@ import { keadaan, pergiKe } from '../main.js'
 export async function halamanPengaturan(wadah) {
   isi(wadah, el('div', { class: 'tumpuk' }, rangkaMuat('160px'), rangkaMuat('160px')))
 
-  let tahun, mapel, bobot, antiSalin
+  let tahun, mapel, bobot, antiSalin, afektifDasar
   try {
-    const [rt, rm, rb, ras] = await Promise.all([
+    const [rt, rm, rb, ras, rad] = await Promise.all([
       sb.from('tahun_ajaran').select('*').order('nama', { ascending: false }),
       sb.from('mata_pelajaran').select('*').order('tingkat').order('nama'),
       sb.from('pengaturan').select('nilai').eq('kunci', 'bobot_nilai').maybeSingle(),
       sb.from('pengaturan').select('nilai').eq('kunci', 'anti_salin').maybeSingle(),
+      sb.from('pengaturan').select('nilai').eq('kunci', 'afektif_dasar').maybeSingle(),
     ])
     if (rt.error) throw rt.error
     if (rm.error) throw rm.error
     tahun = rt.data; mapel = rm.data
     bobot = rb.data?.nilai ?? null
     antiSalin = ras.data?.nilai?.aktif === true   // bawaan: nonaktif
+    const d = Number(rad.data?.nilai?.dasar)
+    afektifDasar = Number.isFinite(d) ? d : 60     // bawaan 60 (nilai untuk telat)
   } catch (err) {
     isi(wadah, el('div', { class: 'pesan pesan-galat' }, pesanGalat(err)))
     return
@@ -103,6 +106,51 @@ export async function halamanPengaturan(wadah) {
 
     // ---- Anti Salin-Tempel (halaman murid) ----
     panelAntiSalin(antiSalin, adminSaja, wadah),
+
+    // ---- Nilai Dasar Afektif ----
+    panelAfektifDasar(afektifDasar, adminSaja, wadah),
+  )
+}
+
+// Panel pengaturan nilai dasar (baseline) afektif pada laporan tiga ranah.
+function panelAfektifDasar(nilaiAwal, adminSaja, wadah) {
+  const input = el('input', { type: 'number', min: '0', max: '100', step: '1',
+    value: String(nilaiAwal), gaya: { width: '90px' },
+    ...(adminSaja ? {} : { disabled: '' }) })
+  const galat = el('div')
+
+  async function simpan() {
+    isi(galat)
+    let d = Math.round(Number(input.value))
+    if (!Number.isFinite(d)) d = 75
+    d = Math.min(100, Math.max(0, d))
+    input.value = String(d)
+    try {
+      const { error } = await sb.from('pengaturan').upsert(
+        { kunci: 'afektif_dasar', nilai: { dasar: d }, diubah_pada: new Date().toISOString() },
+        { onConflict: 'kunci' })
+      if (error) throw error
+      roti('Nilai dasar afektif disimpan: ' + d)
+    } catch (err) {
+      isi(galat, el('div', { class: 'pesan pesan-galat' }, pesanGalat(err)))
+    }
+  }
+
+  return el('section', { class: 'panel' },
+    el('div', { class: 'panel-isi' },
+      el('div', { class: 'seksi-kepala' }, el('h2', {}, 'Nilai Afektif untuk Telat')),
+      el('p', { gaya: { color: 'var(--tinta-lembut)', fontSize: '13px', marginTop: '4px' } },
+        'Pada laporan Tiga Ranah, nilai ketepatan pengumpulan berkisar 75–95 ' +
+        '(makin awal murid mengumpulkan sebelum tenggat, makin tinggi). ' +
+        'Murid yang mengumpulkan TERLAMBAT mendapat nilai tetap sebesar angka ini. ' +
+        'Bawaan 60. Semakin rendah, semakin tegas terhadap keterlambatan.'),
+      el('div', { gaya: { display: 'flex', alignItems: 'center', gap: '10px', marginTop: '12px' } },
+        el('label', { gaya: { fontSize: '14px' } }, 'Nilai untuk telat (0–100):'),
+        input,
+        adminSaja && el('button', { class: 'tbl tbl-kecil tbl-utama', onClick: simpan }, 'Simpan')),
+      !adminSaja && el('p', { gaya: { marginTop: '10px', fontSize: '12.5px', color: 'var(--tinta-lembut)' } },
+        'Hanya admin yang bisa mengubah pengaturan ini.'),
+      galat),
   )
 }
 

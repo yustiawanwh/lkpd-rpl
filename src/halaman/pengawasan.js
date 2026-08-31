@@ -11,6 +11,7 @@ import { el, isi, $, $$, roti, dialog, konfirmasi, inisial, rangkaMuat } from '.
 import { pesanGalat } from '../lib/kesalahan.js'
 import { formatWaktu } from '../lib/pangkat.js'
 import { keadaan, pergiKe } from '../main.js'
+import { ambilSemua } from '../rutin/papan.js'
 
 const STATUS_LABEL = {
   backlog: 'Backlog', dikerjakan: 'Dikerjakan', review: 'Menunggu review', selesai: 'Selesai',
@@ -44,10 +45,11 @@ export async function halamanPengawasan(wadah, kelasId) {
   const penIds = penugasan.map(p => p.id)
   let progres = []
   if (penIds.length) {
-    const { data } = await sb.from('progres_tugas')
+    // Pakai ambilSemua agar TIDAK terpotong batas 1000 baris — kalau terpotong,
+    // sebagian murid tampil kosong padahal punya progres (bug "kolom kosong").
+    progres = await ambilSemua(() => sb.from('progres_tugas')
       .select('id, murid_id, tugas_id, status, nilai_huruf, detik_terpakai, dimulai_pada, penugasan_id, tugas:tugas_id(kode, judul, jenis)')
-      .in('penugasan_id', penIds)
-    progres = data ?? []
+      .in('penugasan_id', penIds))
   }
 
   // Peta murid_id -> data gabungan.

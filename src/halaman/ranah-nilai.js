@@ -17,14 +17,21 @@ import { pergiKe } from '../main.js'
 export async function halamanTigaRanah(wadah, penugasanId) {
   isi(wadah, rangkaMuat('220px'))
 
-  let pen, rekap
+  let pen, rekap, nilaiTelat = 60
   try {
-    const { data, error } = await sb.from('penugasan')
-      .select('id, kelas_id, kelas(nama), tujuan_pembelajaran(id, kode, judul)')
-      .eq('id', penugasanId).single()
+    const [{ data, error }, { data: setDasar }] = await Promise.all([
+      sb.from('penugasan')
+        .select('id, kelas_id, kelas(nama), tujuan_pembelajaran(id, kode, judul)')
+        .eq('id', penugasanId).single(),
+      sb.from('pengaturan').select('nilai').eq('kunci', 'afektif_dasar').maybeSingle(),
+    ])
     if (error) throw error
     pen = data
-    rekap = await rekapTigaRanah(penugasanId, pen.tujuan_pembelajaran.id)
+    // "afektif_dasar" kini bermakna NILAI UNTUK YANG TELAT (batas bawah).
+    // Bawaan 60; dibatasi 0..100.
+    const d = Number(setDasar?.nilai?.dasar)
+    if (Number.isFinite(d)) nilaiTelat = Math.min(100, Math.max(0, d))
+    rekap = await rekapTigaRanah(penugasanId, pen.tujuan_pembelajaran.id, nilaiTelat)
   } catch (err) {
     isi(wadah, el('div', { class: 'panel' }, el('div', { class: 'panel-isi' },
       el('div', { class: 'pesan pesan-galat' }, pesanGalat(err))))); return
@@ -58,7 +65,7 @@ export async function halamanTigaRanah(wadah, penugasanId) {
     el('div', { class: 'panel' }, el('div', { class: 'panel-isi' },
       el('p', { gaya: { color: 'var(--tinta-lembut)', fontSize: '13px', marginTop: '0' } },
         'Kognitif & Psikomotor dihitung dari rata-rata nilai tugas sesuai ranahnya (label di penyunting LKPD). ' +
-        'Afektif dihitung otomatis dari kedisiplinan: ketepatan waktu, keaktifan, tanpa telat, dan badge disiplin. ' +
+        'Afektif dihitung otomatis dari kedisiplinan: ketepatan pengumpulan (makin awal mengumpulkan sebelum tenggat makin tinggi, kisaran 75–95; telat mendapat nilai batas bawah), keaktifan mengerjakan tugas, dan bonus badge disiplin. ' +
         'Skala 0–100. Tanda “—” berarti belum ada data.'),
 
       el('div', { class: 'tabel-bungkus' },

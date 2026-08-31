@@ -7,6 +7,7 @@
  * Penyaring yang ada di bawah semata untuk mempersempit hasil.
  */
 import { sb } from '../lib/supabase.js'
+import { nilaiKetepatanKumpul, KETEPATAN_TELAT_BAWAAN } from '../lib/ranah.js'
 
 /**
  * Ambil SEMUA baris dari sebuah query Supabase, melewati batas default
@@ -332,7 +333,7 @@ export async function rekapNilaiPerSprint(penugasanId, tpId) {
  * Mengembalikan { murid: [{ murid_id, profil, hurufKognitif, hurufPsikomotor,
  *   afektif:{...} }] }. Perhitungan angka dilakukan di lib/ranah.js.
  */
-export async function rekapTigaRanah(penugasanId, tpId) {
+export async function rekapTigaRanah(penugasanId, tpId, nilaiTelat = KETEPATAN_TELAT_BAWAAN) {
   // 1. Tugas TP ini + ranah, estimasi (untuk ketepatan waktu). Semua sprint.
   const { data: sprintTugas } = await sb.from('sprint')
     .select('id, tugas(id, ranah, estimasi_menit, jenis)')
@@ -348,7 +349,7 @@ export async function rekapTigaRanah(penugasanId, tpId) {
 
   // 2. Data penugasan (tenggat) + progres + badge disiplin.
   const [{ data: pen }, progres, { data: badges }, { data: perolehanData }] = await Promise.all([
-    sb.from('penugasan').select('tenggat, kelas_id, tujuan_pembelajaran_id').eq('id', penugasanId).single(),
+    sb.from('penugasan').select('tenggat, mulai, dibuat_pada, kelas_id, tujuan_pembelajaran_id').eq('id', penugasanId).single(),
     ambilSemua(() => sb.from('progres_tugas')
       .select('murid_id, tugas_id, status, nilai_huruf, diserahkan_pada, detik_terpakai, profil:murid_id(nama, no_absen)')
       .eq('penugasan_id', penugasanId)),
@@ -356,6 +357,15 @@ export async function rekapTigaRanah(penugasanId, tpId) {
     ambilSemua(() => sb.from('perolehan_badge').select('murid_id, badge_id').eq('penugasan_id', penugasanId)),
   ])
   const tenggat = pen?.tenggat ? new Date(pen.tenggat) : null
+  // Awal rentang untuk ketepatan pengumpulan: tanggal MULAI (00:00 WIB);
+  // bila mulai kosong → tanggal dibuatnya penugasan.
+  const tenggatMs = tenggat ? tenggat.getTime() : null
+  let awalMs = null
+  if (pen?.mulai) {
+    awalMs = new Date(pen.mulai + 'T00:00:00+07:00').getTime()
+  } else if (pen?.dibuat_pada) {
+    awalMs = new Date(pen.dibuat_pada).getTime()
+  }
 
   // Badge yang bersifat "disiplin" = syarat tepat_estimasi.
   const badgeDisiplin = new Set()
@@ -368,13 +378,17 @@ export async function rekapTigaRanah(penugasanId, tpId) {
   }
 
   // 3. Kelompokkan per murid.
+  // "Sudah waktunya" = tugas yang SUDAH tersentuh kelas (ada murid yang mulai/
+  //   serahkan). Ini penyebut adil untuk keaktifan: tugas yang belum waktunya
+  //   (belum ada yang mengerjakan) tak menghukum murid.
+  const tugasSudahWaktunya = new Set()
   const peta = {}
   function pastikan(murid_id, profil) {
     if (!peta[murid_id]) {
       peta[murid_id] = {
         murid_id, profil,
         hurufKognitif: [], hurufPsikomotor: [],
-        _dikerjakan: 0, _telat: 0, _tepatWaktu: 0, _adaSerah: 0,
+        _dikerjakan: 0, _ketepatanSum: 0, _ketepatanN: 0,
       }
     }
     return peta[murid_id]
@@ -385,43 +399,46 @@ export async function rekapTigaRanah(penugasanId, tpId) {
     if (!info) continue
     const m = pastikan(p.murid_id, p.profil)
 
+    // Tugas dianggap "sudah waktunya" bila ada aktivitas (bukan sekadar backlog).
+    if (p.status && p.status !== 'backlog') tugasSudahWaktunya.add(p.tugas_id)
+
     // Kognitif / Psikomotor: kumpulkan huruf sesuai ranah (bila sudah dinilai).
     if (p.nilai_huruf) {
       if (info.ranah === 'kognitif') m.hurufKognitif.push(p.nilai_huruf)
       else if (info.ranah === 'psikomotor') m.hurufPsikomotor.push(p.nilai_huruf)
     }
 
-    // Keterlibatan & ketepatan waktu (untuk afektif).
+    // Keterlibatan (untuk afektif).
     if (p.status === 'selesai' || p.nilai_huruf) m._dikerjakan++
-    if (p.diserahkan_pada) {
-      m._adaSerah++
-      const serah = new Date(p.diserahkan_pada)
-      // Telat bila melewati tenggat penugasan (bila ada tenggat).
-      if (tenggat && serah > tenggat) m._telat++
-      // Tepat waktu bila durasi kerja <= estimasi (bila ada estimasi).
-      if (info.estimasi_menit > 0 && p.detik_terpakai != null) {
-        if (p.detik_terpakai <= info.estimasi_menit * 60) m._tepatWaktu++
-      }
+
+    // Ketepatan pengumpulan: nilai dari jarak waktu kumpul terhadap tenggat.
+    if (p.diserahkan_pada && tenggatMs != null) {
+      const kumpulMs = new Date(p.diserahkan_pada).getTime()
+      const nilai = nilaiKetepatanKumpul(kumpulMs, awalMs, tenggatMs, nilaiTelat)
+      if (nilai != null) { m._ketepatanSum += nilai; m._ketepatanN++ }
     }
   }
 
-  // 4. Susun komponen afektif 0..100 per murid.
+  // Penyebut keaktifan: tugas yang SUDAH waktunya (bukan seluruh TP).
+  const totalSudahWaktunya = tugasSudahWaktunya.size
+
+  // 4. Susun komponen afektif per murid.
   const murid = Object.values(peta).map(m => {
-    // tepatWaktu: proporsi serahan yang dalam estimasi (bila ada data serah).
-    const tepatWaktu = m._adaSerah > 0 ? Math.round((m._tepatWaktu / m._adaSerah) * 100) : null
-    // keaktifan: proporsi tugas dikerjakan dari total tugas TP.
-    const keaktifan = totalTugas > 0 ? Math.round((m._dikerjakan / totalTugas) * 100) : null
-    // tanpaTelat: 100 bila tak ada telat, turun per telat.
-    const tanpaTelat = m._adaSerah > 0
-      ? Math.round(Math.max(0, (m._adaSerah - m._telat) / m._adaSerah) * 100) : null
-    // skorBadge: 100 bila punya badge disiplin, else 0 (bila ada badge disiplin didefinisikan).
+    // keaktifan: proporsi tugas dikerjakan dari tugas yang SUDAH waktunya.
+    const keaktifan = totalSudahWaktunya > 0
+      ? Math.min(100, Math.round((m._dikerjakan / totalSudahWaktunya) * 100)) : null
+    // ketepatanKumpul: rata-rata nilai ketepatan dari tugas yang dikumpulkan.
+    const ketepatanKumpul = m._ketepatanN > 0
+      ? Math.round(m._ketepatanSum / m._ketepatanN) : null
+    // skorBadge: 100 bila punya badge disiplin (bonus). Null bila tak ada badge
+    // disiplin didefinisikan → tak dihitung.
     const skorBadge = badgeDisiplin.size > 0
       ? (punyaBadgeDisiplin[m.murid_id] ? 100 : 0) : null
 
     return {
       murid_id: m.murid_id, profil: m.profil,
       hurufKognitif: m.hurufKognitif, hurufPsikomotor: m.hurufPsikomotor,
-      afektif: { tepatWaktu, keaktifan, tanpaTelat, badgeDisiplin: skorBadge },
+      afektif: { ketepatanKumpul, keaktifan, badgeDisiplin: skorBadge },
     }
   })
 
