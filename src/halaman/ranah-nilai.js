@@ -64,7 +64,7 @@ export async function halamanTigaRanah(wadah, penugasanId) {
 
     el('div', { class: 'panel' }, el('div', { class: 'panel-isi' },
       el('p', { gaya: { color: 'var(--tinta-lembut)', fontSize: '13px', marginTop: '0' } },
-        'Kognitif & Psikomotor dihitung dari rata-rata nilai tugas sesuai ranahnya (label di penyunting LKPD). ' +
+        'Kognitif & Psikomotor dihitung dari rata-rata nilai tugas sesuai ranahnya (label di penyunting LKM). ' +
         'Afektif dihitung otomatis dari kedisiplinan: ketepatan pengumpulan (makin awal mengumpulkan sebelum tenggat makin tinggi, kisaran 75–95; telat mendapat nilai batas bawah), keaktifan mengerjakan tugas, dan bonus badge disiplin. ' +
         'Skala 0–100. Tanda “—” berarti belum ada data.'),
 

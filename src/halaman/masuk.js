@@ -22,7 +22,7 @@ export function halamanMasuk(wadah) {
       el('div', { class: 'masuk-kepala' },
         el('div', { class: 'masuk-tanda' }, 'B'),
         el('h1', {}, 'Brantas Dev Studio'),
-        el('p', {}, 'Ruang kerja LKPD — Konsentrasi RPL'),
+        el('p', {}, 'Ruang kerja LKM — Konsentrasi RPL'),
       ),
 
       el('div', { class: 'masuk-badan' },

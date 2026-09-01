@@ -192,7 +192,7 @@ export async function rekapNilai(penugasanId, tpId) {
 /**
  * Rekap nilai per sprint: untuk tiap murid, ketuntasan tugas inti
  * dihitung terpisah per sprint. Cocok untuk penilaian harian, karena
- * satu sprint = satu hari kerja / LKPD harian.
+ * satu sprint = satu hari kerja / LKM harian.
  *
  * Mengembalikan { sprints:[{id,nomor,nama,intiTotal}], murid:[{...}] }
  * dengan tiap murid memuat perSprint[sprintId] = { intiSelesai }.

@@ -1,8 +1,8 @@
 /**
- * Penyunting LKPD — membuat & mengubah Tujuan Pembelajaran beserta
+ * Penyunting LKM — membuat & mengubah Tujuan Pembelajaran beserta
  * sprint, tugas, lembar kerja, dan badge, seluruhnya lewat form.
  *
- * Inilah pengganti utama berkas seed.sql: guru bisa menyusun LKPD baru
+ * Inilah pengganti utama berkas seed.sql: guru bisa menyusun LKM baru
  * tanpa menyentuh SQL sama sekali.
  */
 import { sb } from '../lib/supabase.js'
@@ -68,7 +68,7 @@ function kotakFormat(nilaiAwal = '', baris = 3) {
 }
 
 /* ==========================================================
-   DAFTAR LKPD
+   DAFTAR LKM
    ========================================================== */
 export async function halamanLkpd(wadah) {
   isi(wadah, rangkaMuat('200px'))
@@ -91,7 +91,7 @@ export async function halamanLkpd(wadah) {
   isi(wadah,
     el('div', { class: 'kepala' },
       el('div', {},
-        el('h1', {}, 'Bank LKPD'),
+        el('h1', {}, 'Bank LKM'),
         el('p', {}, 'Susun Tujuan Pembelajaran beserta isinya. Yang sudah diterbitkan bisa ditugaskan ke kelas.'),
       ),
       el('div', { class: 'kepala-kanan' },
@@ -121,7 +121,7 @@ export async function halamanLkpd(wadah) {
           ),
         )))
       : el('div', { class: 'panel' }, el('div', { class: 'kosong' },
-          el('h3', {}, 'Belum ada LKPD'),
+          el('h3', {}, 'Belum ada LKM'),
           el('p', {}, 'Buat Tujuan Pembelajaran pertama. Setelah diisi dan diterbitkan, TP bisa ditugaskan ke kelas.'),
           el('button', { class: 'tbl tbl-utama',
             onClick: () => { if (!mapel.length) { adaMapelDulu(); return } dialogTpBaru(wadah, mapel) } },
@@ -191,7 +191,7 @@ function dialogTpBaru(wadah, mapel) {
 }
 
 /* ==========================================================
-   SUNTING SATU LKPD
+   SUNTING SATU LKM
    ========================================================== */
 export async function halamanSuntingLkpd(wadah, tpId) {
   isi(wadah, rangkaMuat('220px'))
@@ -217,7 +217,7 @@ export async function halamanSuntingLkpd(wadah, tpId) {
     el('div', { class: 'kepala' },
       el('div', {},
         el('button', { class: 'tbl tbl-kecil tbl-hantu', gaya: { padding: '2px 0', marginBottom: '4px' },
-          onClick: () => pergiKe('lkpd') }, '← Bank LKPD'),
+          onClick: () => pergiKe('lkpd') }, '← Bank LKM'),
         el('div', { gaya: { display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' } },
           el('span', { class: 'mono', gaya: { fontSize: '11px', color: 'var(--tinta-lembut)' } }, tp.kode),
           tp.terbit ? el('span', { class: 'lencana lencana-selesai' }, 'Terbit')

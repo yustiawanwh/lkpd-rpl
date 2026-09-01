@@ -1,5 +1,5 @@
 /**
- * Rekap Nilai — mengubah capaian LKPD tiap murid menjadi nilai 0–100,
+ * Rekap Nilai — mengubah capaian LKM tiap murid menjadi nilai 0–100,
  * dan mengekspornya ke berkas yang bisa dibuka Excel.
  *
  * Ekspor memakai format CSV, bukan pustaka Excel berat, agar aplikasi

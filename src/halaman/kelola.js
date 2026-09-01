@@ -221,7 +221,7 @@ function panelNilai(bobot, adminSaja, wadah) {
     ),
     el('div', { class: 'panel-isi' },
       el('p', { gaya: { margin: '0 0 14px', fontSize: '13px', color: 'var(--tinta-lembut)', lineHeight: '1.55' } },
-        'Nilai akhir tiap sprint/LKPD adalah gabungan berbobot dari review guru, badge, ' +
+        'Nilai akhir tiap sprint/LKM adalah gabungan berbobot dari review guru, badge, ' +
         'dan kecepatan pengerjaan / durasi (maksimal 100). Berlaku untuk semua kelas.'),
 
       el('div', { class: 'kisi-nilai' },

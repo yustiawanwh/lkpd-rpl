@@ -58,7 +58,7 @@ function bilah(aktif) {
       el('button', { 'aria-current': aktif === 'dashboard' ? 'page' : null,
                      onClick: () => pergiKe('dashboard') }, 'Dashboard'),
       el('button', { 'aria-current': aktif === 'lkpd' ? 'page' : null,
-                     onClick: () => pergiKe('lkpd') }, 'Bank LKPD'),
+                     onClick: () => pergiKe('lkpd') }, 'Bank LKM'),
       el('button', { 'aria-current': aktif === 'pengaturan' ? 'page' : null,
                      onClick: () => pergiKe('pengaturan') }, 'Pengaturan'),
       admin && el('button', { 'aria-current': aktif === 'pengguna' ? 'page' : null,
@@ -619,7 +619,7 @@ async function detilKelas(wadah, kelasId) {
       judul: 'Hapus penugasan?',
       pesan: `Penugasan "${p.tujuan_pembelajaran.judul}" akan dihapus dari kelas ini. ` +
              'Belum ada murid yang mengerjakannya, jadi tidak ada data yang hilang. ' +
-             'TP-nya sendiri tetap tersimpan di Bank LKPD dan bisa ditugaskan lagi nanti.',
+             'TP-nya sendiri tetap tersimpan di Bank LKM dan bisa ditugaskan lagi nanti.',
       tombol: 'Hapus', bahaya: true,
     })
     if (!ya) return
@@ -845,12 +845,12 @@ async function dialogTugaskan(kelasId) {
   if (!tp?.length) {
     let tutup
     tutup = dialog({
-      judul: 'Belum ada LKPD siap',
+      judul: 'Belum ada LKM siap',
       badan: el('p', { gaya: { margin: 0, fontSize: '14px', lineHeight: '1.6' } },
-        'Belum ada Tujuan Pembelajaran yang diterbitkan. Buka Bank LKPD untuk menyusun ' +
+        'Belum ada Tujuan Pembelajaran yang diterbitkan. Buka Bank LKM untuk menyusun ' +
         'atau menerbitkan sebuah TP, lalu tugaskan ke kelas ini.'),
       kaki: [el('button', { class: 'tbl tbl-utama', gaya: { marginLeft: 'auto' },
-        onClick: () => { tutup(); pergiKe('lkpd') } }, 'Ke Bank LKPD')],
+        onClick: () => { tutup(); pergiKe('lkpd') } }, 'Ke Bank LKM')],
       lebar: '460px',
     })
     return

@@ -1,5 +1,5 @@
 /**
- * Konversi capaian LKPD menjadi nilai 0–100.
+ * Konversi capaian LKM menjadi nilai 0–100.
  *
  * MODEL BARU (disepakati): nilai akhir per sprint adalah gabungan
  * berbobot dari tiga komponen, total maksimal 100:

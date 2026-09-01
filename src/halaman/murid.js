@@ -238,7 +238,7 @@ function gabungKelas() {
 /* ==========================================================
    Papan kanban
    ========================================================== */
-// Panel pengantar LKPD (latar belakang, petunjuk, materi awal) yang bisa
+// Panel pengantar LKM (latar belakang, petunjuk, materi awal) yang bisa
 // dibuka/tutup. Muncul hanya bila ada isinya.
 function pengantarLkpd(tp) {
   if (!tp) return null
@@ -302,7 +302,7 @@ async function tampilPapan(wadah) {
     const R = 26, K = 2 * Math.PI * R
 
     isi(wadah,
-      // Pengantar LKPD (latar belakang, petunjuk, materi) — bisa dibuka/tutup.
+      // Pengantar LKM (latar belakang, petunjuk, materi) — bisa dibuka/tutup.
       pengantarLkpd(data.penugasan?.tujuan_pembelajaran),
 
       // Tab sprint
@@ -587,7 +587,7 @@ function tabelLembar(l, terkunci = false) {
     return el('div', { class: 'kosong', gaya: { padding: '28px' } },
       el('h3', {}, 'Tabel ini belum siap'),
       el('p', {}, 'Struktur tabel belum lengkap (belum ada kolom atau baris). ' +
-                  'Sampaikan ke gurumu agar melengkapinya di panel LKPD.'))
+                  'Sampaikan ke gurumu agar melengkapinya di panel LKM.'))
   }
 
   function laporSimpan(status, info) {
