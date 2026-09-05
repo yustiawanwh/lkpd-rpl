@@ -71,12 +71,31 @@ export async function unggahBukti(namaSaran, blob) {
  * - Nextcloud: URL GET bisa langsung jadi src <img> (server melayani + CORS *).
  * - Supabase: createSignedUrl.
  */
+// Cache URL bertanda-tangan (signed) di memori. Tanpa ini, tiap pemanggilan
+// menghasilkan URL baru (tanda tangan berbeda) sehingga peramban mengunduh
+// ulang gambar yang sama — boros egress & lambat. Cache dipakai ulang selama
+// masih dalam masa berlaku (dengan margin aman).
+const cacheUrl = new Map()   // path -> { url, kedaluwarsa }
+const BERLAKU_DETIK = 3600
+const MARGIN_DETIK = 300     // perbarui 5 menit sebelum benar-benar kedaluwarsa
+
 export async function urlBukti(path) {
   if (path && path.startsWith(PENGAWALAN)) {
+    // Server file (Nextcloud): URL stabil, peramban bisa cache sendiri.
     return urlPenuh(path.slice(PENGAWALAN.length))
   }
-  const { data } = await sb.storage.from('bukti').createSignedUrl(path, 3600)
-  return data?.signedUrl || null
+
+  // Supabase: pakai URL ter-cache bila masih berlaku.
+  const kini = Date.now()
+  const tersimpan = cacheUrl.get(path)
+  if (tersimpan && tersimpan.kedaluwarsa > kini) return tersimpan.url
+
+  const { data } = await sb.storage.from('bukti').createSignedUrl(path, BERLAKU_DETIK)
+  const url = data?.signedUrl || null
+  if (url) {
+    cacheUrl.set(path, { url, kedaluwarsa: kini + (BERLAKU_DETIK - MARGIN_DETIK) * 1000 })
+  }
+  return url
 }
 
 /** Hapus bukti sesuai lokasinya. */

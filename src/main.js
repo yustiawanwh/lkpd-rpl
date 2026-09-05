@@ -130,6 +130,12 @@ sb.auth.onAuthStateChange((peristiwa, sesi) => {
 
   if (peristiwa === 'SIGNED_IN') {
     const user = sesi.user
+    // Bila profil untuk user yang SAMA sudah dimuat, ini biasanya event
+    // SIGNED_IN ulang saat tab kembali aktif / token divalidasi. Tak perlu
+    // memuat profil & menggambar ulang seluruh halaman (mencegah reload boros
+    // yang mengambil ulang data & gambar).
+    if (keadaan.profil && keadaan.profil.id === user.id) return
+
     // Tunda ke luar callback agar tidak memicu kebuntuan auth.
     setTimeout(async () => {
       await muatProfil(user)
