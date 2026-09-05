@@ -158,6 +158,12 @@ async function siapkanCetak(penugasanId, tpId, data, tugasDipilih) {
       body += p.profil?.no_absen ? ` <span class="absen">Absen ${escapeHtml(p.profil.no_absen)}</span>` : ''
       body += `</div>`
 
+      // Catatan kerja murid (bila ada) — sebelumnya tak ikut tercetak.
+      if (p.catatan && String(p.catatan).trim()) {
+        body += `<div class="lk-judul">Catatan kerja murid</div>` +
+          `<div class="catatan-murid">${escapeHtml(p.catatan).replace(/\n/g, '<br>')}</div>`
+      }
+
       // Isian tabel (multi kode).
       const kodeLembar = String(p.tugas?.lembar_kode ?? '')
         .split(/[,;]/).map(x => x.trim().toUpperCase()).filter(Boolean)
@@ -216,6 +222,7 @@ function bukaCetak(bodyHtml) {
     .murid-kepala { border-bottom: 1px solid #e2e8e4; padding-bottom: 5px; margin-bottom: 7px; }
     .absen { color: #666; font-size: 11px; }
     .lk-judul { font-weight: 600; font-size: 11.5px; margin: 8px 0 4px; }
+    .catatan-murid { font-size: 11.5px; line-height: 1.5; background: #f6f8f6; border: 1px solid #dce5df; border-radius: 6px; padding: 7px 10px; margin-bottom: 6px; white-space: pre-wrap; }
     table.lk { border-collapse: collapse; width: 100%; margin-bottom: 6px; }
     table.lk th, table.lk td { border: 1px solid #b7c6bc; padding: 4px 6px; text-align: left; vertical-align: top; font-size: 11px; }
     table.lk th { background: #e4f0ea; }
