@@ -827,3 +827,12 @@ body.anti-salin-aktif [contenteditable="true"]{-webkit-user-select:text;-moz-use
   border-color:var(--hijau-terang);
   box-shadow:0 0 0 3px var(--hijau-lembut);
 }
+
+/* Dialog pemilihan tugas untuk Cetak PDF (koreksi offline) */
+.cetak-pilih{max-height:320px;overflow-y:auto;border:1px solid var(--garis);
+  border-radius:8px;padding:6px}
+.cetak-pilih-baris{display:flex;align-items:center;gap:8px;padding:6px 8px;
+  border-radius:6px;cursor:pointer;font-size:13.5px}
+.cetak-pilih-baris:hover{background:var(--hijau-lembut)}
+.cetak-pilih-baris input{width:16px;height:16px;cursor:pointer;flex:none}
+.cetak-jml{color:var(--tinta-lembut);font-size:12px}
