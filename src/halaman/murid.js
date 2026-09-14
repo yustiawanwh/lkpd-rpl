@@ -14,6 +14,7 @@ import * as LK from '../lib/lembar.js'
 import { keadaan, pergiKe, keluar } from '../main.js'
 import { dialogTiket, timerAktif, hentikanTimer } from './tiket.js'
 import { mulaiKendaliMurid, hentikanKendaliMurid, setTugasAktif } from '../rutin/kendali-murid.js'
+import { daftarAsesmenMurid } from './asesmen-murid.js'
 
 const LAJUR = [
   ['backlog',    'Backlog',          '#8A9A91'],
@@ -92,7 +93,6 @@ function bilah(aktif) {
    ========================================================== */
 async function daftarKelas(wadah) {
   const p = keadaan.profil
-
   isi(wadah,
     el('header', { class: 'bilah' },
       el('button', { class: 'bilah-merek bilah-merek-klik', title: 'Kembali ke beranda',
@@ -136,6 +136,7 @@ async function daftarKelas(wadah) {
         ),
       ),
       gabungKelas(),
+      seksiAsesmenMurid(wadah),
       el('div', { class: 'tumpuk', gaya: { marginTop: '14px' } },
         ...data.map((a) => el('button', {
           class: 'panel',
@@ -886,4 +887,28 @@ async function tampilKemajuan(wadah) {
     const kisi = $('#maju-kisi')
     if (kisi) kisi.style.gridTemplateColumns = '1fr'
   }
+}
+
+/* Banner asesmen di daftar kelas murid: muncul bila ada asesmen terbit.
+   Meng-async load jumlah asesmen; bila ada, tampilkan tombol menuju daftar. */
+function seksiAsesmenMurid(wadah) {
+  const kotak = el('div', {})
+  ;(async () => {
+    try {
+      const { data, error } = await sb.from('asesmen')
+        .select('id', { count: 'exact' }).eq('terbit', true).limit(1)
+      if (error) throw error
+      if (!data || !data.length) return   // tak ada asesmen → jangan tampilkan apa pun
+      isi(kotak, el('div', { class: 'panel', gaya: { marginTop: '14px', borderLeft: '4px solid var(--hijau-terang)' } },
+        el('div', { class: 'panel-isi' },
+          el('div', { gaya: { display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' } },
+            el('div', { gaya: { flex: '1', minWidth: '180px' } },
+              el('div', { gaya: { fontWeight: '600', fontSize: '15px' } }, '📋 Asesmen Diagnostik'),
+              el('div', { gaya: { fontSize: '12.5px', color: 'var(--tinta-lembut)', marginTop: '3px' } },
+                'Ada asesmen yang bisa kamu kerjakan.')),
+            el('button', { class: 'tbl tbl-utama',
+              onClick: () => { const u = $('#daftar-kelas'); daftarAsesmenMurid(u) } }, 'Buka asesmen')))))
+    } catch (_) { /* diam: banner opsional */ }
+  })()
+  return kotak
 }

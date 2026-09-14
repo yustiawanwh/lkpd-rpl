@@ -11,6 +11,7 @@ import { halamanLkpd, halamanSuntingLkpd } from './kelola-lkpd.js'
 import { halamanNilai } from './nilai.js'
 import { halamanTigaRanah } from './ranah-nilai.js'
 import { cetakReview } from './cetak-review.js'
+import { halamanAsesmen, halamanSuntingAsesmen } from './kelola-asesmen.js'
 import { halamanPengawasan } from './pengawasan.js'
 import { halamanDashboard } from './dashboard.js'
 import { ambilSemua } from '../rutin/papan.js'
@@ -38,6 +39,8 @@ export async function halamanGuru(wadah, r) {
     else if (tampilan === 'pengguna') await halamanPengguna(utama)
     else if (tampilan === 'lkpd' && r.bagian[0]) await halamanSuntingLkpd(utama, Number(r.bagian[0]))
     else if (tampilan === 'lkpd') await halamanLkpd(utama)
+    else if (tampilan === 'asesmen' && r.bagian[0]) await halamanSuntingAsesmen(utama, Number(r.bagian[0]))
+    else if (tampilan === 'asesmen') await halamanAsesmen(utama)
     else await daftarKelas(utama)
   } catch (err) {
     isi(utama, el('div', { class: 'pesan pesan-galat' }, pesanGalat(err)))
@@ -60,6 +63,8 @@ function bilah(aktif) {
                      onClick: () => pergiKe('dashboard') }, 'Dashboard'),
       el('button', { 'aria-current': aktif === 'lkpd' ? 'page' : null,
                      onClick: () => pergiKe('lkpd') }, 'Bank LKM'),
+      el('button', { 'aria-current': aktif === 'asesmen' ? 'page' : null,
+                     onClick: () => pergiKe('asesmen') }, 'Asesmen'),
       el('button', { 'aria-current': aktif === 'pengaturan' ? 'page' : null,
                      onClick: () => pergiKe('pengaturan') }, 'Pengaturan'),
       admin && el('button', { 'aria-current': aktif === 'pengguna' ? 'page' : null,
