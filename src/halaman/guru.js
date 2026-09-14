@@ -12,6 +12,7 @@ import { halamanNilai } from './nilai.js'
 import { halamanTigaRanah } from './ranah-nilai.js'
 import { cetakReview } from './cetak-review.js'
 import { halamanAsesmen, halamanSuntingAsesmen } from './kelola-asesmen.js'
+import { halamanHasilAsesmen } from './hasil-asesmen.js'
 import { halamanPengawasan } from './pengawasan.js'
 import { halamanDashboard } from './dashboard.js'
 import { ambilSemua } from '../rutin/papan.js'
@@ -39,6 +40,7 @@ export async function halamanGuru(wadah, r) {
     else if (tampilan === 'pengguna') await halamanPengguna(utama)
     else if (tampilan === 'lkpd' && r.bagian[0]) await halamanSuntingLkpd(utama, Number(r.bagian[0]))
     else if (tampilan === 'lkpd') await halamanLkpd(utama)
+    else if (tampilan === 'asesmen' && r.bagian[0] === 'hasil' && r.bagian[1]) await halamanHasilAsesmen(utama, Number(r.bagian[1]))
     else if (tampilan === 'asesmen' && r.bagian[0]) await halamanSuntingAsesmen(utama, Number(r.bagian[0]))
     else if (tampilan === 'asesmen') await halamanAsesmen(utama)
     else await daftarKelas(utama)

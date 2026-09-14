@@ -67,6 +67,8 @@ function kartuAsesmen(a, wadah) {
         el('button', { class: 'tbl tbl-kecil tbl-utama',
           onClick: () => pergiKe(`asesmen/${a.id}`) }, 'Kelola soal'),
         el('button', { class: 'tbl tbl-kecil',
+          onClick: () => pergiKe(`asesmen/hasil/${a.id}`) }, '📊 Hasil'),
+        el('button', { class: 'tbl tbl-kecil',
           onClick: () => dialogAsesmen(wadah, a) }, 'Ubah'),
         el('button', { class: 'tbl tbl-kecil tbl-bahaya',
           onClick: () => hapusAsesmen(a, wadah) }, 'Hapus')))))
@@ -191,7 +193,9 @@ export async function halamanSuntingAsesmen(wadah, asesmenId) {
         el('h1', {}, asesmen.judul),
         el('p', {}, `${asesmen.jenis === 'kognitif' ? '🧠 Kognitif' : '💬 Non-kognitif'} · ${penempatanTeks(asesmen)}`)),
       el('div', { class: 'kepala-kanan' },
-        el('button', { class: 'tbl tbl-utama', onClick: () => dialogSoal(wadah, asesmenId) }, '+ Tambah soal'))),
+        el('div', { gaya: { display: 'flex', gap: '6px', flexWrap: 'wrap' } },
+          el('button', { class: 'tbl tbl-kecil', onClick: () => pergiKe(`asesmen/hasil/${asesmenId}`) }, '📊 Hasil'),
+          el('button', { class: 'tbl tbl-utama', onClick: () => dialogSoal(wadah, asesmenId) }, '+ Tambah soal')))),
 
     !soal.length
       ? el('div', { class: 'panel' }, el('div', { class: 'kosong' },
