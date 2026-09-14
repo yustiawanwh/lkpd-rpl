@@ -14,7 +14,7 @@ import * as LK from '../lib/lembar.js'
 import { keadaan, pergiKe, keluar } from '../main.js'
 import { dialogTiket, timerAktif, hentikanTimer } from './tiket.js'
 import { mulaiKendaliMurid, hentikanKendaliMurid, setTugasAktif } from '../rutin/kendali-murid.js'
-import { daftarAsesmenMurid } from './asesmen-murid.js'
+import { daftarAsesmenMurid, cekGerbangAsesmen } from './asesmen-murid.js'
 
 const LAJUR = [
   ['backlog',    'Backlog',          '#8A9A91'],
@@ -113,7 +113,7 @@ async function daftarKelas(wadah) {
   try {
     const { data, error } = await sb
       .from('penugasan')
-      .select('id, mulai, tenggat, dibuka, tujuan_pembelajaran(id, kode, judul, total_jp, total_menit), kelas(nama, mata_pelajaran(nama, tingkat))')
+      .select('id, mulai, tenggat, dibuka, tujuan_pembelajaran(id, kode, judul, total_jp, total_menit), kelas(id, nama, mata_pelajaran(nama, tingkat))')
       .eq('dibuka', true)
     if (error) throw error
 
@@ -284,6 +284,10 @@ async function tampilPapan(wadah) {
 
   // Mulai denyut & langganan kendali guru untuk penugasan ini.
   mulaiKendaliMurid(a.id)
+
+  // Gerbang asesmen: bila ada asesmen 'wajib dulu' yang belum dikerjakan,
+  // tampilkan dialog anjuran (tetap boleh dilewati). Sekali per sesi.
+  cekGerbangAsesmen(a, wadah)
 
   let sprintAktif = data.sprints[0]?.id ?? null
 

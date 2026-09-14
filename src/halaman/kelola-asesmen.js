@@ -106,6 +106,7 @@ async function dialogAsesmen(wadah, a = null) {
   fMode.addEventListener('change', segarkanMode)
 
   const fTerbit = el('input', { type: 'checkbox', ...(a?.terbit ? { checked: '' } : {}) })
+  const fWajibDulu = el('input', { type: 'checkbox', ...(a?.wajib_dulu ? { checked: '' } : {}) })
   const galat = el('div')
 
   const tutup = dialog({
@@ -117,6 +118,8 @@ async function dialogAsesmen(wadah, a = null) {
       el('div', { class: 'ruas' }, el('label', {}, 'Penempatan'), fMode),
       bungkusTp, bungkusKelas,
       el('label', { class: 'anti-salin-baris' }, fTerbit, el('span', {}, 'Terbitkan (murid bisa mengerjakan)')),
+      el('label', { class: 'anti-salin-baris' }, fWajibDulu,
+        el('span', {}, 'Kerjakan dulu sebelum sprint (anjuran; murid tetap boleh melewati)')),
       galat),
     kaki: [
       el('button', { class: 'tbl tbl-utama', onClick: async (e) => {
@@ -129,6 +132,7 @@ async function dialogAsesmen(wadah, a = null) {
           tujuan_pembelajaran_id: fMode.value === 'tp' ? Number(fTp.value) : null,
           kelas_id: fMode.value === 'kelas' ? Number(fKelas.value) : null,
           terbit: fTerbit.checked,
+          wajib_dulu: fWajibDulu.checked,
         }
         e.target.disabled = true
         try {
