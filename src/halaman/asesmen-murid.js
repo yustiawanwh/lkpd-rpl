@@ -34,14 +34,21 @@ export async function daftarAsesmenMurid(wadah) {
   }
 
   if (!daftar.length) {
-    isi(wadah, el('div', { class: 'panel' }, el('div', { class: 'kosong' },
-      el('h3', {}, 'Belum ada asesmen'),
-      el('p', {}, 'Saat ini tidak ada asesmen yang perlu kamu kerjakan.'))))
+    isi(wadah,
+      el('div', { class: 'kepala' }, el('div', {},
+        el('button', { class: 'tbl tbl-kecil tbl-hantu', gaya: { padding: '2px 0', marginBottom: '4px' },
+          onClick: () => { keadaan.penugasan = null; pergiKe('') } }, '← Beranda'),
+        el('h1', {}, 'Asesmen Diagnostik'))),
+      el('div', { class: 'panel' }, el('div', { class: 'kosong' },
+        el('h3', {}, 'Belum ada asesmen'),
+        el('p', {}, 'Saat ini tidak ada asesmen yang perlu kamu kerjakan.'))))
     return
   }
 
   isi(wadah,
     el('div', { class: 'kepala' }, el('div', {},
+      el('button', { class: 'tbl tbl-kecil tbl-hantu', gaya: { padding: '2px 0', marginBottom: '4px' },
+        onClick: () => { keadaan.penugasan = null; pergiKe('') } }, '← Beranda'),
       el('h1', {}, 'Asesmen Diagnostik'),
       el('p', {}, 'Kerjakan asesmen berikut. Jawaban tersimpan otomatis.'))),
     el('div', { class: 'tumpuk' }, ...daftar.map(a => {
@@ -146,6 +153,6 @@ async function kerjakanAsesmen(wadah, asesmenId) {
       el('p', { gaya: { margin: '0', color: 'var(--tinta-lembut)', fontSize: '13px' } },
         '✓ Jawaban tersimpan otomatis. Kamu bisa menutup dan melanjutkan nanti.'),
       el('button', { class: 'tbl tbl-utama', gaya: { marginTop: '10px' },
-        onClick: () => { roti('Asesmen tersimpan'); daftarAsesmenMurid(wadah) } }, 'Selesai'))),
+        onClick: () => { roti('Asesmen tersimpan'); keadaan.penugasan = null; pergiKe('') } }, 'Selesai'))),
   )
 }

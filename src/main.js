@@ -36,7 +36,14 @@ function rute() {
 }
 
 export function pergiKe(jalur) {
-  window.location.hash = '#/' + String(jalur).replace(/^\/+/, '')
+  const target = '#/' + String(jalur).replace(/^\/+/, '')
+  if (window.location.hash === target) {
+    // Hash sama → 'hashchange' tak terpicu. Paksa gambar ulang agar navigasi
+    // tetap berpindah (mis. dari daftar asesmen kembali ke beranda).
+    gambar()
+  } else {
+    window.location.hash = target
+  }
 }
 
 /* ==========================================================
