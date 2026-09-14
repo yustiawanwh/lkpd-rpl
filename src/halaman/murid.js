@@ -118,7 +118,8 @@ async function daftarKelas(wadah) {
     if (error) throw error
 
     if (!data.length) {
-      isi(kotak, gabungKelas(), el('div', { class: 'panel', gaya: { marginTop: '14px' } },
+      isi(kotak, gabungKelas(), seksiAsesmenMurid(wadah),
+        el('div', { class: 'panel', gaya: { marginTop: '14px' } },
         el('div', { class: 'kosong' },
           el('h3', {}, 'Belum ada tugas'),
           el('p', {}, 'Kamu belum tergabung di kelas mana pun, atau gurumu belum ' +
