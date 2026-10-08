@@ -30,8 +30,16 @@ export function dialogLembar(wadah, tpId, sprints, urutanBaru, l = null) {
   let baris = [...(l?.struktur?.baris ?? [])]
   let kolom = (l?.struktur?.kolom ?? []).map(k => ({ ...k }))
   let jumlahBaris = Number(l?.struktur?.jumlah_baris ?? 5)
+  // Khusus referensi: judul kolom bacaan + isi data (larik baris → larik sel)
+  let kolomBaca = [...(l?.struktur?.kolom_baca ?? [])]
+  let dataRef = (l?.struktur?.data ?? []).map(b => [...b])
+  if (!kolomBaca.length) kolomBaca = ['', '']
+  if (!dataRef.length) dataRef = [kolomBaca.map(() => '')]
 
-  if (!kolom.length) kolom = [{ label: 'Jawaban', input: 'textarea', key: 'jawaban' }]
+  // Referensi boleh tanpa kolom isian murid (tabel bacaan murni).
+  if (!kolom.length && (l?.tipe ?? 'matriks') !== 'referensi') {
+    kolom = [{ label: 'Jawaban', input: 'textarea', key: 'jawaban' }]
+  }
 
   const galat = el('div')
   const areaBaris = el('div')
@@ -49,9 +57,93 @@ export function dialogLembar(wadah, tpId, sprints, urutanBaru, l = null) {
             el('option', { value: v, selected: (k.input ?? 'textarea') === v }, lb)))
         return s
       })(),
-      kolom.length > 1 && el('button', { class: 'tbl tbl-kecil tbl-bahaya',
-        onClick: () => { kolom.splice(i, 1); gambarKolom() } }, '✕'),
+      (kolom.length > 1 || fTipe.value === 'referensi') && el('button', { class: 'tbl tbl-kecil tbl-bahaya',
+        title: 'Hapus kolom', onClick: () => { kolom.splice(i, 1); gambarKolom() } }, '✕'),
     )))
+    if (!kolom.length) {
+      areaKolom.append(el('p', { class: 'ref-catatan' },
+        'Tanpa kolom isian: murid hanya membaca tabel ini.'))
+    }
+  }
+
+  const labelKecil = (t) => el('label', { gaya: { fontSize: '11px', fontWeight: '600',
+    textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--tinta-lembut)',
+    display: 'block', marginBottom: '6px' } }, t)
+
+  /* ---- Penyunting tabel referensi ---- */
+  function gambarReferensi() {
+    const n = kolomBaca.length
+    const kisi = el('div', { class: 'ref-kisi' },
+      el('table', { class: 'ref-tabel' },
+        el('thead', {}, el('tr', {},
+          ...kolomBaca.map((h, j) => el('th', {},
+            el('div', { class: 'ref-kepala' },
+              el('input', { type: 'text', value: h, placeholder: `Kolom ${j + 1}`,
+                onInput: (e) => { kolomBaca[j] = e.target.value } }),
+              n > 1 && el('button', { class: 'tbl tbl-kecil tbl-bahaya', title: 'Hapus kolom ini',
+                onClick: () => { kolomBaca.splice(j, 1); dataRef.forEach(b => b.splice(j, 1)); gambarReferensi() } }, '✕')))),
+          el('th', { class: 'ref-aksi' }))),
+        el('tbody', {}, ...dataRef.map((brs, i) => el('tr', {},
+          ...kolomBaca.map((_, j) => el('td', {},
+            el('textarea', { rows: '1', placeholder: '…',
+              onInput: (e) => { dataRef[i][j] = e.target.value } }, brs[j] ?? ''))),
+          el('td', { class: 'ref-aksi' },
+            el('button', { class: 'tbl tbl-kecil', title: 'Naikkan', disabled: i === 0,
+              onClick: () => { [dataRef[i - 1], dataRef[i]] = [dataRef[i], dataRef[i - 1]]; gambarReferensi() } }, '↑'),
+            el('button', { class: 'tbl tbl-kecil tbl-bahaya', title: 'Hapus baris',
+              onClick: () => { dataRef.splice(i, 1); if (!dataRef.length) dataRef.push(kolomBaca.map(() => '')); gambarReferensi() } }, '✕')))))))
+
+    isi(areaBaris,
+      labelKecil('Isi tabel bacaan'),
+      el('p', { class: 'ref-catatan' },
+        'Baris judul = nama kolom bacaan. Baris di bawahnya = data yang dibaca murid. ' +
+        'Kolom isian murid (di atas) muncul di sebelah kanan tabel ini.'),
+      kisi,
+      el('div', { gaya: { display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '8px' } },
+        el('button', { class: 'tbl tbl-kecil',
+          onClick: () => { dataRef.push(kolomBaca.map(() => '')); gambarReferensi() } }, '+ Baris'),
+        el('button', { class: 'tbl tbl-kecil',
+          onClick: () => { kolomBaca.push(''); dataRef.forEach(b => b.push('')); gambarReferensi() } }, '+ Kolom bacaan'),
+        el('button', { class: 'tbl tbl-kecil', onClick: dialogTempel }, '📋 Tempel dari Excel/Word')),
+    )
+  }
+
+  // Panel tempel (di dalam dialog yang sama — bukan dialog bertumpuk,
+  // agar tombol Esc tidak menutup penyunting sekaligus).
+  function dialogTempel() {
+    const ada = $('.ref-panel-tempel', areaBaris)
+    if (ada) { ada.remove(); return }
+    const ta = el('textarea', { rows: '7', class: 'ref-tempel',
+      placeholder: 'Salin tabel dari Excel, Google Sheets, atau Word, lalu tempel (Ctrl+V) di sini.' })
+    const cekJudul = el('input', { type: 'checkbox', checked: true })
+    const info = el('p', { class: 'ref-catatan' })
+    ta.addEventListener('input', () => {
+      const r = LK.uraiTempelan(ta.value)
+      info.textContent = r.length ? `Terbaca ${r.length} baris × ${Math.max(...r.map(x => x.length))} kolom.` : ''
+    })
+    const panel = el('div', { class: 'ref-panel-tempel' },
+      ta,
+      el('label', { gaya: { display: 'flex', gap: '6px', alignItems: 'center', margin: '6px 0', fontSize: '13px' } },
+        cekJudul, 'Baris pertama adalah judul kolom'),
+      info,
+      el('div', { gaya: { display: 'flex', gap: '6px', justifyContent: 'flex-end' } },
+        el('button', { class: 'tbl tbl-kecil', onClick: () => panel.remove() }, 'Batal'),
+        el('button', { class: 'tbl tbl-kecil tbl-utama', onClick: () => {
+          const r = LK.uraiTempelan(ta.value)
+          if (!r.length) { info.textContent = 'Belum ada tabel yang terbaca.'; return }
+          const lebar = Math.max(...r.map(x => x.length))
+          const rata = r.map(x => Array.from({ length: lebar }, (_, j) => x[j] ?? ''))
+          if (cekJudul.checked) { kolomBaca = rata[0]; dataRef = rata.slice(1) }
+          else {
+            kolomBaca = Array.from({ length: lebar }, (_, j) => kolomBaca[j] || `Kolom ${j + 1}`)
+            dataRef = rata
+          }
+          if (!dataRef.length) dataRef = [kolomBaca.map(() => '')]
+          gambarReferensi(); roti('Tabel ditempel — periksa lalu Simpan')
+        } }, 'Pakai (ganti isi tabel)')),
+    )
+    areaBaris.append(panel)
+    ta.focus()
   }
 
   function gambarBaris() {
@@ -79,13 +171,17 @@ export function dialogLembar(wadah, tpId, sprints, urutanBaru, l = null) {
             gaya: { maxWidth: '120px' }, onInput: (e) => { jumlahBaris = Number(e.target.value) } })),
       )
     } else {
-      // referensi — data bacaan tidak disunting di sini (lanjutan bisa ditambah)
-      isi(areaBaris, el('p', { gaya: { fontSize: '12.5px', color: 'var(--tinta-lembut)' } },
-        'Tabel referensi berisi data bacaan tetap. Untuk mengisi datanya, gunakan berkas seed sebagai contoh — penyunting data referensi akan ditambahkan berikutnya.'))
+      gambarReferensi()
     }
   }
 
-  fTipe.addEventListener('change', gambarBaris)
+  fTipe.addEventListener('change', () => {
+    // Lembar baru yang diubah ke referensi: buang kolom isian bawaan "Jawaban"
+    // agar tabel bacaan murni tidak memunculkan kolom isian tanpa sengaja.
+    if (!l && fTipe.value === 'referensi' && kolom.length === 1 &&
+        kolom[0].key === 'jawaban' && kolom[0].label === 'Jawaban') kolom = []
+    gambarKolom(); gambarBaris()
+  })
   gambarKolom(); gambarBaris()
 
   let tutup
@@ -101,11 +197,11 @@ export function dialogLembar(wadah, tpId, sprints, urutanBaru, l = null) {
       .filter(k => k.label.trim())
       .map(k => ({ key: k.key || LK.jadikanKey(k.label), label: k.label.trim(), input: k.input || 'textarea' }))
 
-    if (!kolomBersih.length) {
+    const tipe = fTipe.value
+    if (!kolomBersih.length && tipe !== 'referensi') {
       isi(galat, el('div', { class: 'pesan pesan-galat' }, 'Minimal satu kolom dengan nama.')); return
     }
 
-    const tipe = fTipe.value
     const struktur = { kolom: kolomBersih }
     if (tipe === 'matriks' || tipe === 'formulir') {
       const barisBersih = baris.filter(b => b.trim())
@@ -115,10 +211,16 @@ export function dialogLembar(wadah, tpId, sprints, urutanBaru, l = null) {
       struktur.baris = barisBersih
     } else if (tipe === 'daftar') {
       struktur.jumlah_baris = jumlahBaris
-    } else if (l?.struktur?.data) {
-      // Pertahankan data referensi yang sudah ada
-      struktur.data = l.struktur.data
-      struktur.kolom_baca = l.struktur.kolom_baca
+    } else {
+      // Referensi: buang kolom bacaan tanpa judul & baris yang seluruhnya kosong.
+      const pakaiKolom = kolomBaca.map((h, j) => [h.trim(), j]).filter(([h]) => h)
+      if (!pakaiKolom.length) {
+        isi(galat, el('div', { class: 'pesan pesan-galat' }, 'Beri nama minimal satu kolom bacaan.')); return
+      }
+      struktur.kolom_baca = pakaiKolom.map(([h]) => h)
+      struktur.data = dataRef
+        .map(b => pakaiKolom.map(([, j]) => String(b[j] ?? '').trim()))
+        .filter(b => b.some(c => c !== ''))
     }
 
     // Validasi akhir memakai pustaka yang sama dengan sisi murid
@@ -161,7 +263,7 @@ export function dialogLembar(wadah, tpId, sprints, urutanBaru, l = null) {
       el('div', { gaya: { borderTop: '1px solid var(--garis)', margin: '6px 0', paddingTop: '12px' } },
         el('label', { gaya: { fontSize: '11px', fontWeight: '600', textTransform: 'uppercase',
                               letterSpacing: '.05em', color: 'var(--tinta-lembut)', display: 'block', marginBottom: '8px' } },
-          'Kolom isian'),
+          'Kolom isian murid'),
         areaKolom,
         el('button', { class: 'tbl tbl-kecil', gaya: { marginTop: '4px' },
           onClick: () => { kolom.push({ label: '', input: 'textarea' }); gambarKolom() } }, '+ Kolom')),

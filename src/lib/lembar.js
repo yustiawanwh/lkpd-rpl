@@ -38,6 +38,35 @@ export function labelBaris(lembar) { return strukturDari(lembar).baris ?? [] }
 export function dataReferensi(l)   { return strukturDari(l).data ?? [] }
 export function kolomBaca(l)       { return strukturDari(l).kolom_baca ?? [] }
 
+/**
+ * Apakah struktur lembar cukup lengkap untuk ditampilkan ke murid?
+ * Referensi: cukup punya kolom bacaan + data (kolom isian murid opsional).
+ * Jenis lain: wajib punya kolom isian dan baris.
+ */
+export function strukturSiap(lembar) {
+  if (lembar?.tipe === 'referensi') {
+    return kolomBaca(lembar).length > 0 && dataReferensi(lembar).length > 0
+  }
+  return kolom(lembar).length > 0 && jumlahBaris(lembar) > 0
+}
+
+/**
+ * Mengurai teks tempelan dari Excel / Google Sheets / Word / Markdown
+ * menjadi larik baris → larik sel. Pemisah: tab (Excel/Sheets/Word) atau
+ * garis tegak | (tabel Markdown). Baris pemisah Markdown (---) dilewati.
+ */
+export function uraiTempelan(teks) {
+  const baris = String(teks ?? '').replace(/\r/g, '').split('\n').filter(b => b.trim() !== '')
+  if (!baris.length) return []
+  const pakaiTab = baris.some(b => b.includes('\t'))
+  return baris
+    .map(b => pakaiTab
+      ? b.split('\t')
+      : b.trim().replace(/^\|/, '').replace(/\|$/, '').split('|'))
+    .map(sel => sel.map(c => c.trim()))
+    .filter(sel => !sel.every(c => /^:?-{2,}:?$/.test(c) || c === ''))
+}
+
 export function jumlahBaris(lembar) {
   const s = strukturDari(lembar)
   switch (lembar?.tipe) {
@@ -123,8 +152,9 @@ export function periksaStruktur(tipe, struktur) {
 
   if (tipe === 'referensi') {
     const data = struktur?.data ?? []
-    if (data.length === 0) galat.push('Tabel referensi harus punya minimal satu baris data.')
     const lebar = (struktur?.kolom_baca ?? []).length
+    if (lebar === 0) galat.push('Tabel referensi harus punya minimal satu kolom bacaan.')
+    if (data.length === 0) galat.push('Tabel referensi harus punya minimal satu baris data.')
     data.forEach((baris, i) => {
       if (lebar > 0 && baris.length !== lebar) {
         galat.push(`Baris data ke-${i + 1} tidak sesuai jumlah kolom (${lebar}).`)

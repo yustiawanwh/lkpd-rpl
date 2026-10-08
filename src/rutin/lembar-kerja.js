@@ -205,7 +205,7 @@ export function buatTabelIsi(lembar, ctx) {
   const kolom = LK.kolom(lembar)
   const nBaris = LK.jumlahBaris(lembar)
 
-  if (!kolom.length || (lembar.tipe !== 'referensi' && nBaris === 0)) {
+  if (!LK.strukturSiap(lembar)) {
     return el('div', { class: 'kosong', gaya: { padding: '20px' } },
       el('h3', {}, 'Tabel belum siap'),
       el('p', {}, 'Struktur tabel ini belum lengkap. Sampaikan ke gurumu.'))

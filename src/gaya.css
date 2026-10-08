@@ -840,3 +840,18 @@ body.anti-salin-aktif [contenteditable="true"]{-webkit-user-select:text;-moz-use
 .cetak-pilih-baris:hover{background:var(--hijau-lembut)}
 .cetak-pilih-baris input{width:16px;height:16px;cursor:pointer;flex:none}
 .cetak-jml{color:var(--tinta-lembut);font-size:12px}
+
+/* Penyunting tabel referensi (dialog lembar kerja) */
+.ref-catatan{font-size:12px;color:var(--tinta-lembut);margin:2px 0 8px}
+.ref-kisi{overflow-x:auto;border:1px solid var(--garis);border-radius:8px}
+.ref-tabel{border-collapse:collapse;width:100%;min-width:max-content}
+.ref-tabel th,.ref-tabel td{border-bottom:1px solid var(--garis);padding:4px;vertical-align:top}
+.ref-tabel th{background:var(--kertas)}
+.ref-tabel input,.ref-tabel textarea{width:100%;min-width:130px;font-size:13px;padding:4px 6px;
+  border:1px solid var(--garis);border-radius:6px;font-family:inherit;resize:vertical}
+.ref-tabel th input{font-weight:700}
+.ref-kepala{display:flex;gap:4px;align-items:center}
+.ref-aksi{width:1%;white-space:nowrap}
+.ref-aksi .tbl{margin-left:2px}
+.ref-tempel{width:100%;font-family:ui-monospace,Consolas,monospace;font-size:12.5px}
+.ref-panel-tempel{margin-top:10px;padding:10px;border:1px dashed var(--garis-tegas);border-radius:8px;background:var(--kertas)}

@@ -589,7 +589,7 @@ function tabelLembar(l, terkunci = false) {
 
   // Jaga-jaga: bila struktur tabel kosong (mis. dibuat guru tapi belum
   // diisi kolom/baris), tampilkan pesan jelas alih-alih panel kosong.
-  if (!kolom.length || (l.tipe !== 'referensi' && nBaris === 0)) {
+  if (!LK.strukturSiap(l)) {
     return el('div', { class: 'kosong', gaya: { padding: '28px' } },
       el('h3', {}, 'Tabel ini belum siap'),
       el('p', {}, 'Struktur tabel belum lengkap (belum ada kolom atau baris). ' +
