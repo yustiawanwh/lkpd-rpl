@@ -42,7 +42,7 @@ export function teksKeHtml(teks) {
   // isinya tidak diproses sebagai paragraf/daftar. Setiap blok diganti
   // sementara dengan penanda unik, lalu dipulihkan di akhir sebagai HTML kode.
   const blokKode = []
-  const teksTanpaKode = teks.replace(/```([a-zA-Z]*)\r?\n([\s\S]*?)```/g, (_, bahasa, isi) => {
+  const teksTanpaKode = teks.replace(/```([a-zA-Z][\w.+-]*)?[ \t]*\r?\n([\s\S]*?)```/g, (_, bahasa, isi) => {
     const idx = blokKode.length
     blokKode.push(kodeKeHtml(isi.replace(/\n$/, ''), (bahasa || '').toLowerCase()))
     return `\u0000KODE${idx}\u0000`
@@ -103,14 +103,15 @@ export function teksKeHtml(teks) {
 }
 
 /* ==========================================================
-   Pewarna kode (syntax highlighting) sederhana untuk Dart/Flutter.
+   Pewarna kode (syntax highlighting) sederhana:
+   Dart/Flutter, JavaScript, React (JSX), Next.js, TypeScript.
 
    KEAMANAN: kode di-escape lebih dulu (semua < > & jadi teks), lalu HANYA
    ditambahi <span class="..."> untuk pewarnaan. Tidak ada atribut lain, tidak
    ada eksekusi. Warna diberi lewat kelas CSS (tok-*), bukan gaya inline.
 
-   Pendekatan: tokenisasi berurutan (komentar, string, angka, keyword, jenis,
-   anotasi) memakai satu regex bergabung, agar tidak saling menimpa.
+   Pendekatan: tokenisasi berurutan memakai satu regex bergabung, agar token
+   tidak saling menimpa (komentar di dalam string tidak ikut diwarnai, dst).
    ========================================================== */
 
 const DART_KEYWORD = new Set([
@@ -131,35 +132,107 @@ const DART_TIPE = new Set([
   'Object','Function','Iterable','Duration','GlobalKey','Expanded','Flexible',
 ])
 
+const JS_KEYWORD = new Set([
+  'async','await','break','case','catch','class','const','continue','debugger',
+  'default','delete','do','else','export','extends','false','finally','for','from',
+  'function','if','import','in','instanceof','let','new','null','of','return',
+  'static','super','switch','this','throw','true','try','typeof','undefined','var',
+  'void','while','with','yield','as',
+  // TypeScript
+  'type','interface','enum','implements','readonly','private','public','protected',
+  'declare','namespace','keyof','satisfies',
+])
+// Objek bawaan JS + API umum React / Next.js.
+const JS_TIPE = new Set([
+  'Array','Object','String','Number','Boolean','Promise','Map','Set','Date','JSON',
+  'Math','Error','TypeError','RegExp','Symbol','console','window','document',
+  'fetch','Response','Request','URL','URLSearchParams','FormData','setTimeout',
+  'setInterval','clearTimeout','clearInterval','structuredClone','globalThis',
+  'process','require','module','exports',
+  // TypeScript
+  'string','number','boolean','any','unknown','never','object','Record','Partial',
+  // React
+  'React','useState','useEffect','useContext','useReducer','useRef','useMemo',
+  'useCallback','useLayoutEffect','useId','useTransition','createContext',
+  'Fragment','StrictMode','Suspense','createRoot','memo','forwardRef','lazy',
+  // Next.js
+  'Link','Image','Head','Script','useRouter','usePathname','useSearchParams',
+  'useParams','redirect','notFound','NextResponse','NextRequest','Metadata',
+  'getServerSideProps','getStaticProps','getStaticPaths','revalidatePath',
+])
+
+const BAHASA_DART = new Set(['', 'dart', 'flutter'])
+const BAHASA_JS = new Set([
+  'js','javascript','mjs','cjs','node','nodejs',
+  'jsx','react','reactjs',
+  'ts','typescript','tsx',
+  'next','nextjs','next.js',
+])
+const NAMA_TAMPIL = {
+  js: 'JavaScript', javascript: 'JavaScript', mjs: 'JavaScript', cjs: 'JavaScript',
+  node: 'Node.js', nodejs: 'Node.js', jsx: 'React', react: 'React', reactjs: 'React',
+  ts: 'TypeScript', typescript: 'TypeScript', tsx: 'React TS',
+  next: 'Next.js', nextjs: 'Next.js', 'next.js': 'Next.js', dart: 'Dart', flutter: 'Flutter',
+}
+
 function spanTok(kelas, teksAman) { return `<span class="tok-${kelas}">${teksAman}</span>` }
+
+function warnaiDart(aman) {
+  // Catatan: teks SUDAH di-escape, jadi kutip menjadi &#39; dan &quot;.
+  // Grup: 1=komentar, 2=string, 3=anotasi, 4=angka, 5=identifier.
+  const pola = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|(&#39;(?:(?!&#39;).)*&#39;|&quot;(?:(?!&quot;).)*&quot;)|(@[A-Za-z_]\w*)|(\b\d+\.?\d*\b)|([A-Za-z_]\w*)/g
+  return aman.replace(pola, (m, komentar, teks, anotasi, angka, kata) => {
+    if (komentar) return spanTok('komentar', komentar)
+    if (teks) return spanTok('teks', teks)
+    if (anotasi) return spanTok('anotasi', anotasi)
+    if (angka) return spanTok('angka', angka)
+    if (kata) {
+      if (DART_KEYWORD.has(kata)) return spanTok('kunci', kata)
+      if (DART_TIPE.has(kata)) return spanTok('tipe', kata)
+      return kata
+    }
+    return m
+  })
+}
+
+function warnaiJs(aman) {
+  // Grup:
+  //  1 komentar (// atau /* */ atau {/* */} JSX)
+  //  2 string ('..', "..", `..` template — boleh lintas baris untuk template)
+  //  3 pembuka tag JSX (&lt; atau &lt;/)  4 nama tag
+  //  5 atribut JSX (nama tepat sebelum = " atau = {)
+  //  6 angka  7 identifier  8 penanda ( setelah identifier → nama fungsi
+  const pola = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|(&#39;(?:(?!&#39;)[^\n])*&#39;|&quot;(?:(?!&quot;)[^\n])*&quot;|`[^`]*`)|(&lt;\/?)([A-Za-z][\w.]*)|([A-Za-z_][\w-]*)(?==(?:&quot;|&#39;|\{))|(\b\d+(?:\.\d+)?\b)|([A-Za-z_$][\w$]*)(\s*\()?/g
+  return aman.replace(pola, (m, komentar, teks, buka, tag, atribut, angka, kata, kurung) => {
+    if (komentar) return spanTok('komentar', komentar)
+    if (teks) return spanTok('teks', teks)
+    if (buka) {
+      // Komponen (huruf besar) → warna jenis; elemen HTML → warna tag.
+      const kelas = /^[A-Z]/.test(tag) ? 'tipe' : 'tag'
+      return buka + spanTok(kelas, tag)
+    }
+    if (atribut) return spanTok('atribut', atribut)
+    if (angka) return spanTok('angka', angka)
+    if (kata) {
+      const sisa = kurung || ''
+      if (JS_KEYWORD.has(kata)) return spanTok('kunci', kata) + sisa
+      if (JS_TIPE.has(kata)) return spanTok('tipe', kata) + sisa
+      if (kurung) return spanTok('fungsi', kata) + sisa
+      return kata
+    }
+    return m
+  })
+}
 
 /** Ubah satu blok kode menjadi HTML berwarna yang aman. */
 export function kodeKeHtml(kode, bahasa = '') {
   const aman = escapeHtml(kode)
-
-  // Hanya warnai bila bahasa dart/flutter (atau kosong). Selain itu tampilkan polos.
-  const warnai = bahasa === '' || bahasa === 'dart' || bahasa === 'flutter'
   let isi = aman
+  if (BAHASA_DART.has(bahasa)) isi = warnaiDart(aman)
+  else if (BAHASA_JS.has(bahasa)) isi = warnaiJs(aman)
+  // Bahasa lain: tampil polos (tetap di kotak kode gelap).
 
-  if (warnai) {
-    // Satu regex bergabung, diproses berurutan agar token tidak tumpang tindih.
-    // Catatan: teks SUDAH di-escape, jadi kutip menjadi &#39; dan &quot;.
-    // Grup: 1=komentar, 2=string, 3=anotasi, 4=angka, 5=identifier.
-    const pola = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|(&#39;(?:(?!&#39;).)*&#39;|&quot;(?:(?!&quot;).)*&quot;)|(@[A-Za-z_]\w*)|(\b\d+\.?\d*\b)|([A-Za-z_]\w*)/g
-    isi = aman.replace(pola, (m, komentar, teks, anotasi, angka, kata) => {
-      if (komentar) return spanTok('komentar', komentar)
-      if (teks) return spanTok('teks', teks)
-      if (anotasi) return spanTok('anotasi', anotasi)
-      if (angka) return spanTok('angka', angka)
-      if (kata) {
-        if (DART_KEYWORD.has(kata)) return spanTok('kunci', kata)
-        if (DART_TIPE.has(kata)) return spanTok('tipe', kata)
-        return kata
-      }
-      return m
-    })
-  }
-
-  const label = bahasa ? `<div class="kode-label">${escapeHtml(bahasa)}</div>` : ''
+  const nama = NAMA_TAMPIL[bahasa] || bahasa
+  const label = nama ? `<div class="kode-label">${escapeHtml(nama)}</div>` : ''
   return `<pre class="kode-blok">${label}<code>${isi}</code></pre>`
 }

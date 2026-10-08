@@ -745,6 +745,7 @@ textarea:disabled,input:disabled{opacity:.55;cursor:not-allowed;background:var(-
 .format-tbl{min-width:30px;font-weight:700;padding:3px 8px}
 .format-tbl[title="Miring"]{font-style:italic}
 .format-tbl[title="Garis bawah"]{text-decoration:underline}
+.format-bahasa{font-size:12px;padding:2px 4px;border-radius:6px;max-width:110px}
 .format-bantuan{font-size:12px;color:var(--tinta-lembut);line-height:1.5;margin:6px 0 0;
   background:var(--hijau-lembut);padding:8px 10px;border-radius:8px}
 .ta-format{width:100%}
@@ -771,6 +772,9 @@ textarea:disabled,input:disabled{opacity:.55;cursor:not-allowed;background:var(-
 .tok-komentar{color:#7f849c;font-style:italic}  /* komentar: abu */
 .tok-angka{color:#fab387}      /* angka: oranye */
 .tok-anotasi{color:#f9e2af}    /* @anotasi: kuning */
+.tok-fungsi{color:#89b4fa}     /* nama fungsi dipanggil: biru */
+.tok-tag{color:#f38ba8}        /* tag HTML di JSX: merah muda */
+.tok-atribut{color:#f9e2af}    /* atribut JSX (className, onClick): kuning */
 
 /* Merek di bilah bisa diklik untuk kembali ke beranda */
 .bilah-merek-klik{background:none;border:none;cursor:pointer;color:inherit;padding:0;

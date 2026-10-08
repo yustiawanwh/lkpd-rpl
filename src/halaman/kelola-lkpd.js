@@ -38,16 +38,28 @@ function kotakFormat(nilaiAwal = '', baris = 3) {
     ta.focus()
   }
 
-  // Sisipkan blok kode Dart di posisi kursor.
+  // Bahasa blok kode yang disisipkan tombol { }. Pilihan diingat per peramban.
+  let bahasaKode = 'dart'
+  try { bahasaKode = localStorage.getItem('bahasa_kode') || 'dart' } catch {}
+  const pilihBahasa = el('select', { class: 'format-bahasa', title: 'Bahasa blok kode' },
+    ...[['dart', 'Dart'], ['js', 'JavaScript'], ['jsx', 'React'], ['nextjs', 'Next.js']]
+      .map(([v, t]) => el('option', { value: v, ...(v === bahasaKode ? { selected: true } : {}) }, t)))
+  pilihBahasa.addEventListener('change', () => {
+    bahasaKode = pilihBahasa.value
+    try { localStorage.setItem('bahasa_kode', bahasaKode) } catch {}
+  })
+
+  // Sisipkan blok kode di posisi kursor.
   function sisipKode() {
     const a = ta.selectionStart ?? ta.value.length
     const b = ta.selectionEnd ?? a
-    const pilih = ta.value.slice(a, b) || '// tulis kode Dart di sini'
-    const blok = '\n```dart\n' + pilih + '\n```\n'
+    const pilih = ta.value.slice(a, b) || '// tulis kode di sini'
+    const pembuka = '\n```' + bahasaKode + '\n'
+    const blok = pembuka + pilih + '\n```\n'
     ta.value = ta.value.slice(0, a) + blok + ta.value.slice(b)
     ta.focus()
     // taruh kursor di dalam blok
-    const posisi = a + '\n```dart\n'.length
+    const posisi = a + pembuka.length
     ta.selectionStart = posisi
     ta.selectionEnd = posisi + pilih.length
   }
@@ -62,7 +74,8 @@ function kotakFormat(nilaiAwal = '', baris = 3) {
     tbl('U', 'Garis bawah', () => bungkus('_')),
     tbl('•', 'Daftar butir', () => awalBaris('-')),
     tbl('1.', 'Daftar bernomor', () => awalBaris('1.')),
-    tbl('{ }', 'Blok kode Dart', () => sisipKode()),
+    tbl('{ }', 'Sisipkan blok kode', () => sisipKode()),
+    pilihBahasa,
   )
   return { el: el('div', {}, bar, ta), get: () => ta.value }
 }
