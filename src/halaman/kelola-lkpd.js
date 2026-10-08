@@ -11,6 +11,7 @@ import { pesanGalat } from '../lib/kesalahan.js'
 import * as LK from '../lib/lembar.js'
 import { keadaan, pergiKe } from '../main.js'
 import { dialogLembar, dialogBadge } from './kelola-lembar.js'
+import { pasangKunciSoal } from '../rutin/lembar-kerja.js'
 
 // Kotak teks berformat: textarea + baris tombol (B, I, U, •, 1.) yang
 // menyisipkan penanda Markdown di sekitar teks terpilih. Mengembalikan
@@ -218,7 +219,7 @@ export async function halamanSuntingLkpd(wadah, tpId) {
       sb.from('badge').select('*').eq('tujuan_pembelajaran_id', tpId).order('urutan'),
     ])
     if (rtp.error) throw rtp.error
-    tp = rtp.data; sprints = rs.data ?? []; lembar = rl.data ?? []; badges = rb.data ?? []
+    tp = rtp.data; sprints = rs.data ?? []; lembar = await pasangKunciSoal(rl.data ?? []); badges = rb.data ?? []
   } catch (err) {
     isi(wadah, el('div', { class: 'pesan pesan-galat' }, pesanGalat(err))); return
   }
@@ -346,7 +347,7 @@ function barisLembar(l, wadah, tpId, sprints) {
     el('span', { gaya: { flex: '1', minWidth: '140px', fontWeight: '600', fontSize: '13.5px' } }, l.judul),
     el('span', { class: 'tanda' }, LK.TIPE[l.tipe]?.split('—')[0]?.trim() ?? l.tipe),
     el('span', { gaya: { fontSize: '12px', color: 'var(--tinta-lembut)' } },
-      `${LK.kolom(l).length} kolom · ${LK.jumlahBaris(l)} baris`),
+      (l.tipe === 'soal' ? `${LK.jumlahBaris(l)} butir soal` : `${LK.kolom(l).length} kolom · ${LK.jumlahBaris(l)} baris`)),
   )
 }
 

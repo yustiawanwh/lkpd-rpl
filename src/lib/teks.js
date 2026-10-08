@@ -19,16 +19,28 @@ function escapeHtml(s) {
     .replace(/'/g, '&#39;')
 }
 
-// Format inline: tebal, miring, garis bawah. Dijalankan pada teks yang SUDAH
-// di-escape, jadi hanya penanda yang kita kenali yang berubah jadi tag.
+// Format inline: `kode`, tebal, miring, garis bawah. Dijalankan pada teks
+// yang SUDAH di-escape, jadi hanya penanda yang kita kenali yang berubah jadi
+// tag. Kode sebaris disisihkan dulu agar isinya (mis. nama_variabel atau a*b)
+// tidak ikut diubah menjadi garis bawah/miring.
 function inline(teks) {
-  return teks
+  const kode = []
+  const tanpaKode = teks.replace(/`([^`\n]+)`/g, (_, isi) => {
+    kode.push(isi); return `\u0001${kode.length - 1}\u0001`
+  })
+  return tanpaKode
     // **tebal**
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    // _garis bawah_
-    .replace(/_([^_]+)_/g, '<u>$1</u>')
+    // _garis bawah_ (hanya bila diapit spasi/awal-akhir, agar nama_variabel aman)
+    .replace(/(^|[\s(])_([^_\n]+)_(?=$|[\s).,:;!?])/g, '$1<u>$2</u>')
     // *miring* (setelah bold agar tak bentrok)
     .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+    .replace(/\u0001(\d+)\u0001/g, (_, i) => `<code class="kode-inline">${kode[Number(i)]}</code>`)
+}
+
+/** Format satu baris pendek (mis. teks pilihan jawaban) tanpa paragraf. */
+export function inlineKeHtml(teks) {
+  return inline(escapeHtml(teks ?? ''))
 }
 
 /**

@@ -36,23 +36,39 @@ export function dialogLembar(wadah, tpId, sprints, urutanBaru, l = null) {
   if (!kolomBaca.length) kolomBaca = ['', '']
   if (!dataRef.length) dataRef = [kolomBaca.map(() => '')]
 
-  // Referensi boleh tanpa kolom isian murid (tabel bacaan murni).
-  if (!kolom.length && (l?.tipe ?? 'matriks') !== 'referensi') {
+  // Khusus soal: salinan butir agar suntingan bisa dibatalkan.
+  let soal = (l?.struktur?.soal ?? []).map(q => ({ ...q, opsi: [...(q.opsi ?? [])],
+    kunci: Array.isArray(q.kunci) ? [...q.kunci] : (q.kunci ?? null),
+    label: q.label ? [...q.label] : null }))
+
+  // Referensi & soal boleh tanpa kolom isian (tabel bacaan murni / butir soal).
+  if (!kolom.length && !['referensi', 'soal'].includes(l?.tipe ?? 'matriks')) {
     kolom = [{ label: 'Jawaban', input: 'textarea', key: 'jawaban' }]
   }
 
   const galat = el('div')
   const areaBaris = el('div')
   const areaKolom = el('div')
+  const bagianKolom = el('div', { gaya: { borderTop: '1px solid var(--garis)', margin: '6px 0', paddingTop: '12px' } },
+    el('label', { gaya: { fontSize: '11px', fontWeight: '600', textTransform: 'uppercase',
+                          letterSpacing: '.05em', color: 'var(--tinta-lembut)', display: 'block', marginBottom: '8px' } },
+      'Kolom isian murid'),
+    areaKolom,
+    el('button', { class: 'tbl tbl-kecil', gaya: { marginTop: '4px' },
+      onClick: () => { kolom.push({ label: '', input: 'textarea' }); gambarKolom() } }, '+ Kolom'))
 
   function gambarKolom() {
     isi(areaKolom, ...kolom.map((k, i) => el('div', {
       gaya: { display: 'flex', gap: '6px', marginBottom: '6px', alignItems: 'center' } },
       el('input', { type: 'text', value: k.label, placeholder: 'Nama kolom',
         gaya: { flex: '1' }, onInput: (e) => { k.label = e.target.value } }),
+      k.input === 'pilihan' && el('input', { type: 'text', value: (k.opsi ?? []).join(', '),
+        placeholder: 'Pilihan, pisahkan koma', title: 'Daftar pilihan (dropdown), pisahkan dengan koma',
+        gaya: { flex: '1' }, onInput: (e) => {
+          k.opsi = e.target.value.split(',').map(x => x.trim()).filter(Boolean) } }),
       (() => {
         const s = el('select', { gaya: { maxWidth: '150px' },
-          onChange: (e) => { k.input = e.target.value } },
+          onChange: (e) => { k.input = e.target.value; gambarKolom() } },
           ...Object.entries(LK.INPUT).map(([v, lb]) =>
             el('option', { value: v, selected: (k.input ?? 'textarea') === v }, lb)))
         return s
@@ -146,8 +162,135 @@ export function dialogLembar(wadah, tpId, sprints, urutanBaru, l = null) {
     ta.focus()
   }
 
+  /* ---- Penyunting lembar SOAL ---- */
+  function gambarSoal() {
+    const kartu = soal.map((q, i) => {
+      const fNo = el('input', { type: 'text', value: q.no ?? '', placeholder: 'No', class: 'soal-ed-no',
+        title: 'Nomor butir, mis. 2b', onInput: (e) => { q.no = e.target.value } })
+      const fJenis = el('select', { class: 'soal-ed-jenis', onChange: (e) => {
+        q.jenis = e.target.value
+        if ((q.jenis === 'pg' || q.jenis === 'centang') && (q.opsi ?? []).length < 2) q.opsi = [...(q.opsi ?? []), '', ''].slice(0, Math.max(2, q.opsi?.length ?? 0))
+        q.kunci = q.jenis === 'centang' ? (Array.isArray(q.kunci) ? q.kunci : []) : (Array.isArray(q.kunci) ? (q.kunci[0] ?? null) : q.kunci)
+        if (q.jenis === 'kolom' && !q.label?.length) q.label = [...LK.LABEL_TEBAK]
+        gambarSoal()
+      } }, ...Object.entries(LK.JENIS_SOAL).map(([v, t]) => el('option', { value: v, selected: q.jenis === v }, t)))
+      const fTeks = el('textarea', { rows: '3', class: 'soal-ed-teks',
+        placeholder: 'Pertanyaan / petunjuk. Boleh **tebal**, `kode`, dan blok ```js … ```',
+        onInput: (e) => { q.teks = e.target.value } }, q.teks ?? '')
+
+      const bagian = [
+        el('div', { class: 'soal-ed-kepala' }, fNo, fJenis,
+          el('button', { class: 'tbl tbl-kecil', title: 'Naikkan', disabled: i === 0,
+            onClick: () => { [soal[i - 1], soal[i]] = [soal[i], soal[i - 1]]; gambarSoal() } }, '↑'),
+          el('button', { class: 'tbl tbl-kecil', title: 'Turunkan', disabled: i === soal.length - 1,
+            onClick: () => { [soal[i + 1], soal[i]] = [soal[i], soal[i + 1]]; gambarSoal() } }, '↓'),
+          el('button', { class: 'tbl tbl-kecil tbl-bahaya', title: 'Hapus butir',
+            onClick: () => { soal.splice(i, 1); gambarSoal() } }, '✕')),
+        fTeks,
+      ]
+
+      if (q.jenis === 'pg' || q.jenis === 'centang') {
+        const ganda = q.jenis === 'centang'
+        const nama = 'kunci-' + q.id
+        bagian.push(el('div', { class: 'soal-ed-opsi' },
+          ...(q.opsi ?? []).map((o, j) => el('div', { class: 'soal-ed-opsi-baris' },
+            el('input', { type: ganda ? 'checkbox' : 'radio', name: nama, title: 'Tandai sebagai jawaban benar',
+              checked: ganda ? (q.kunci ?? []).includes(j) : q.kunci === j,
+              onChange: (e) => {
+                if (ganda) {
+                  const set = new Set(q.kunci ?? []); e.target.checked ? set.add(j) : set.delete(j)
+                  q.kunci = [...set].sort((a, b) => a - b)
+                } else q.kunci = j
+              } }),
+            el('input', { type: 'text', value: o, placeholder: `Pilihan ${String.fromCharCode(65 + j)}`,
+              onInput: (e) => { q.opsi[j] = e.target.value } }),
+            el('button', { class: 'tbl tbl-kecil tbl-bahaya', title: 'Hapus pilihan', onClick: () => {
+              q.opsi.splice(j, 1)
+              if (ganda) q.kunci = (q.kunci ?? []).filter(x => x !== j).map(x => x > j ? x - 1 : x)
+              else q.kunci = q.kunci === j ? null : (q.kunci > j ? q.kunci - 1 : q.kunci)
+              gambarSoal()
+            } }, '✕'))),
+          el('div', { class: 'soal-ed-bawah' },
+            el('button', { class: 'tbl tbl-kecil', onClick: () => { q.opsi.push(''); gambarSoal() } }, '+ Pilihan'),
+            el('span', {}, ganda ? 'Centang kotak di kiri = kunci (opsional, boleh lebih dari satu).'
+                                 : 'Klik bulatan di kiri = kunci (opsional).'),
+            !ganda && q.kunci !== null && q.kunci !== undefined &&
+              el('button', { class: 'tbl tbl-kecil tbl-hantu', onClick: () => { q.kunci = null; gambarSoal() } }, 'Hapus kunci'))))
+      } else if (q.jenis === 'kolom') {
+        bagian.push(el('div', { class: 'ruas', gaya: { margin: '6px 0 0' } },
+          el('label', {}, 'Judul kotak jawaban (pisahkan dengan / )'),
+          el('input', { type: 'text', value: (q.label ?? LK.LABEL_TEBAK).join(' / '),
+            onInput: (e) => { q.label = e.target.value.split('/').map(x => x.trim()).filter(Boolean) } })))
+      }
+      return el('div', { class: 'soal-ed-butir' }, ...bagian)
+    })
+
+    isi(areaBaris,
+      labelKecil(`Butir soal (${soal.length})`),
+      el('p', { class: 'ref-catatan' },
+        'Tiap butir tampil ke murid lengkap dengan tempat menjawab. Kunci jawaban tidak pernah terlihat oleh murid.'),
+      ...kartu,
+      el('div', { gaya: { display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '8px' } },
+        el('button', { class: 'tbl tbl-kecil', onClick: () => {
+          soal.push({ id: LK.idSoalBaru(), no: '', jenis: 'panjang', teks: '', opsi: [], kunci: null, label: null })
+          gambarSoal()
+          areaBaris.querySelectorAll('.soal-ed-teks')[soal.length - 1]?.focus()
+        } }, '+ Butir'),
+        el('button', { class: 'tbl tbl-kecil', onClick: () => panelTeksSoal(false) }, '📥 Impor dari teks'),
+        soal.length > 0 && el('button', { class: 'tbl tbl-kecil', onClick: () => panelTeksSoal(true) }, '📝 Sunting sebagai teks')),
+    )
+  }
+
+  // Panel impor / sunting-sebagai-teks (di dalam dialog yang sama).
+  function panelTeksSoal(sunting) {
+    $('.ref-panel-tempel', areaBaris)?.remove()
+    const ta = el('textarea', { rows: '12', class: 'ref-tempel' }, sunting ? LK.soalKeTeks(soal) : '')
+    ta.placeholder = '### 2b | pg\nSebelum menjalankan, lingkari tebakan kalian:\n- [ ] Error\n- [x] Berhasil, kuota menjadi 25\n\n### 2d | panjang\nApa yang terjadi?'
+    const info = el('p', { class: 'ref-catatan' })
+    const perbarui = () => {
+      const r = LK.uraiSoalTeks(ta.value)
+      info.textContent = r.length ? `Terbaca ${r.length} butir.` : ''
+    }
+    ta.addEventListener('input', perbarui); perbarui()
+    const terapkan = (ganti) => {
+      const r = LK.uraiSoalTeks(ta.value)
+      if (!r.length) { info.textContent = 'Belum ada butir yang terbaca.'; return }
+      if (sunting) {
+        // Pertahankan penanda butir lama berdasarkan urutan, agar jawaban murid tidak hilang.
+        r.forEach((q, i) => { if (soal[i]) q.id = soal[i].id })
+      }
+      soal = ganti ? r : [...soal, ...r]
+      panel.remove(); gambarSoal(); roti(`${r.length} butir ${ganti ? 'diterapkan' : 'ditambahkan'} — periksa lalu Simpan`)
+    }
+    const panel = el('div', { class: 'ref-panel-tempel' },
+      el('details', { class: 'soal-format' },
+        el('summary', {}, 'Format teks (klik untuk melihat)'),
+        el('pre', {}, [
+          '### <nomor> | <jenis>      ← awal tiap butir',
+          'Teks pertanyaan (boleh beberapa baris dan blok ```js)',
+          '- [ ] pilihan biasa         ← untuk pg / centang',
+          '- [x] pilihan benar (kunci, opsional)',
+          '',
+          'Jenis: singkat · panjang · pg · centang · tebak · info',
+          'Kotak sendiri:  ### 2f | kolom: Method / Hasil',
+        ].join('\n'))),
+      ta, info,
+      el('div', { gaya: { display: 'flex', gap: '6px', justifyContent: 'flex-end', flexWrap: 'wrap' } },
+        el('button', { class: 'tbl tbl-kecil', onClick: () => panel.remove() }, 'Batal'),
+        !sunting && soal.length > 0 && el('button', { class: 'tbl tbl-kecil', onClick: () => terapkan(false) }, 'Tambahkan di akhir'),
+        el('button', { class: 'tbl tbl-kecil tbl-utama', onClick: () => terapkan(true) },
+          sunting ? 'Terapkan perubahan' : (soal.length ? 'Ganti semua butir' : 'Pakai'))))
+    areaBaris.append(panel)
+    ta.focus()
+  }
+
   function gambarBaris() {
     const tipe = fTipe.value
+    bagianKolom.style.display = tipe === 'soal' ? 'none' : ''
+    if (tipe === 'soal') {
+      areaBaris.closest('.dialog')?.style.setProperty('max-width', '780px')
+      gambarSoal(); return
+    }
     if (tipe === 'matriks' || tipe === 'formulir') {
       // Baris berlabel
       isi(areaBaris,
@@ -195,15 +338,33 @@ export function dialogLembar(wadah, tpId, sprints, urutanBaru, l = null) {
     // Bangun struktur, lengkapi key otomatis dari label
     const kolomBersih = kolom
       .filter(k => k.label.trim())
-      .map(k => ({ key: k.key || LK.jadikanKey(k.label), label: k.label.trim(), input: k.input || 'textarea' }))
+      .map(k => ({ key: k.key || LK.jadikanKey(k.label), label: k.label.trim(), input: k.input || 'textarea',
+                   ...(k.input === 'pilihan' ? { opsi: k.opsi ?? [] } : {}) }))
 
     const tipe = fTipe.value
-    if (!kolomBersih.length && tipe !== 'referensi') {
+    if (!kolomBersih.length && !['referensi', 'soal'].includes(tipe)) {
       isi(galat, el('div', { class: 'pesan pesan-galat' }, 'Minimal satu kolom dengan nama.')); return
     }
 
-    const struktur = { kolom: kolomBersih }
-    if (tipe === 'matriks' || tipe === 'formulir') {
+    const struktur = { kolom: tipe === 'soal' ? [] : kolomBersih }
+    if (tipe === 'soal') {
+      struktur.soal = soal.map(q => {
+        const b = { id: q.id || LK.idSoalBaru(), no: String(q.no ?? '').trim(), jenis: q.jenis,
+                    teks: String(q.teks ?? '').replace(/\s+$/, '') }
+        if (q.jenis === 'pg' || q.jenis === 'centang') {
+          // Buang pilihan kosong sambil menyesuaikan indeks kunci.
+          const peta = new Map(); const opsi = []
+          ;(q.opsi ?? []).forEach((o, j) => { if (String(o).trim()) { peta.set(j, opsi.length); opsi.push(String(o).trim()) } })
+          b.opsi = opsi
+          b.kunci = q.jenis === 'centang'
+            ? (Array.isArray(q.kunci) && q.kunci.length ? q.kunci.filter(j => peta.has(j)).map(j => peta.get(j)) : null)
+            : (q.kunci !== null && q.kunci !== undefined && peta.has(q.kunci) ? peta.get(q.kunci) : null)
+          if (Array.isArray(b.kunci) && !b.kunci.length) b.kunci = null
+        }
+        if (q.jenis === 'kolom') b.label = (q.label ?? []).length ? q.label : [...LK.LABEL_TEBAK]
+        return b
+      })
+    } else if (tipe === 'matriks' || tipe === 'formulir') {
       const barisBersih = baris.filter(b => b.trim())
       if (!barisBersih.length) {
         isi(galat, el('div', { class: 'pesan pesan-galat' }, 'Tabel jenis ini butuh minimal satu baris berlabel.')); return
@@ -229,6 +390,17 @@ export function dialogLembar(wadah, tpId, sprints, urutanBaru, l = null) {
       isi(galat, el('div', { class: 'pesan pesan-galat' }, masalah[0])); return
     }
 
+    // Kunci jawaban TIDAK ikut di struktur (yang boleh dibaca murid);
+    // disimpan terpisah di tabel kunci_lembar yang hanya bisa dibaca guru.
+    let petaKunci = null
+    if (tipe === 'soal') {
+      petaKunci = {}
+      struktur.soal = struktur.soal.map(({ kunci, ...q }) => {
+        if (kunci !== null && kunci !== undefined) petaKunci[q.id] = kunci
+        return q
+      })
+    }
+
     simpan.disabled = true; isi(galat)
     const data = {
       tujuan_pembelajaran_id: tpId, kode: fKode.value.trim().toUpperCase(),
@@ -238,12 +410,18 @@ export function dialogLembar(wadah, tpId, sprints, urutanBaru, l = null) {
       urutan: l?.urutan ?? urutanBaru,
     }
     try {
-      const { error } = l
-        ? await sb.from('lembar_kerja').update(data).eq('id', l.id)
-        : await sb.from('lembar_kerja').insert(data)
+      const { data: hasil, error } = l
+        ? await sb.from('lembar_kerja').update(data).eq('id', l.id).select('id').single()
+        : await sb.from('lembar_kerja').insert(data).select('id').single()
       if (error) {
         if (error.code === '23505') throw new Error('Kode lembar ini sudah dipakai pada TP ini.')
         throw error
+      }
+      if (petaKunci) {
+        const { error: eK } = await sb.from('kunci_lembar')
+          .upsert({ lembar_kerja_id: hasil?.id ?? l?.id, kunci: petaKunci, diubah_pada: new Date().toISOString() })
+        if (eK) throw new Error('Soal tersimpan, tetapi kunci jawaban gagal disimpan: ' + pesanGalat(eK) +
+          '. Pastikan migrasi 20260101002700_kunci_rahasia.sql sudah dijalankan.')
       }
       tutup(); roti(l ? 'Lembar diperbarui' : 'Lembar ditambahkan'); halamanSuntingLkpd(wadah, tpId)
     } catch (err) {
@@ -252,27 +430,23 @@ export function dialogLembar(wadah, tpId, sprints, urutanBaru, l = null) {
   }
 
   tutup = dialog({
-    judul: l ? `Ubah Tabel ${l.kode}` : 'Lembar kerja baru',
+    judul: l ? `Ubah ${l.tipe === 'soal' ? 'Soal' : 'Tabel'} ${l.kode}` : 'Lembar kerja baru',
     badan: el('div', {}, galat,
       el('div', { class: 'kisi-2' },
         el('div', { class: 'ruas' }, el('label', {}, 'Kode (mis. A, B, C1)'), fKode),
         el('div', { class: 'ruas' }, el('label', {}, 'Terikat sprint'), fSprint)),
       el('div', { class: 'ruas' }, el('label', {}, 'Judul'), fJudul),
-      el('div', { class: 'ruas' }, el('label', {}, 'Jenis tabel'), fTipe),
+      el('div', { class: 'ruas' }, el('label', {}, 'Jenis lembar'), fTipe),
       el('div', { class: 'ruas' }, el('label', {}, 'Keterangan'), fKeterangan),
-      el('div', { gaya: { borderTop: '1px solid var(--garis)', margin: '6px 0', paddingTop: '12px' } },
-        el('label', { gaya: { fontSize: '11px', fontWeight: '600', textTransform: 'uppercase',
-                              letterSpacing: '.05em', color: 'var(--tinta-lembut)', display: 'block', marginBottom: '8px' } },
-          'Kolom isian murid'),
-        areaKolom,
-        el('button', { class: 'tbl tbl-kecil', gaya: { marginTop: '4px' },
-          onClick: () => { kolom.push({ label: '', input: 'textarea' }); gambarKolom() } }, '+ Kolom')),
+      bagianKolom,
       el('div', { gaya: { borderTop: '1px solid var(--garis)', margin: '12px 0 0', paddingTop: '12px' } }, areaBaris),
     ),
     kaki: [hapus, el('div', { gaya: { marginLeft: 'auto', display: 'flex', gap: '8px' } },
       el('button', { class: 'tbl', onClick: () => tutup() }, 'Batal'), simpan)].filter(Boolean),
-    lebar: '600px',
+    lebar: (l?.tipe === 'soal') ? '780px' : '600px',
   })
+  // gambarBaris pertama terjadi sebelum dialog terpasang; atur lebar ulang bila soal.
+  if (fTipe.value === 'soal') areaBaris.closest('.dialog')?.style.setProperty('max-width', '780px')
 }
 
 async function hapusLembar(wadah, tpId, l) {

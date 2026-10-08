@@ -11,6 +11,7 @@ import { muatPapan, ubahStatus, catatWaktu, papanPeringkat, statistikSaya, badge
   from '../rutin/papan.js'
 import { muatLembar, simpanIsian, buatPenyimpan } from '../rutin/lembar-kerja.js'
 import * as LK from '../lib/lembar.js'
+import { buatFormSoal } from '../lib/soal.js'
 import { keadaan, pergiKe, keluar } from '../main.js'
 import { dialogTiket, timerAktif, hentikanTimer } from './tiket.js'
 import { mulaiKendaliMurid, hentikanKendaliMurid, setTugasAktif } from '../rutin/kendali-murid.js'
@@ -678,6 +679,9 @@ function tabelLembar(l, terkunci = false) {
                         ubah(baris, k.key, e.target.value) } }, nilai)
     return ta
   }
+
+  /* ---- Soal: butir bernomor ---- */
+  if (l.tipe === 'soal') return buatFormSoal(l, data, ubah, { bacaSaja: terkunci })
 
   /* ---- Referensi: baris bacaan + kolom isian ---- */
   if (l.tipe === 'referensi') {

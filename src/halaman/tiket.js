@@ -404,7 +404,7 @@ export function dialogTiket(tugas, saatBerubah) {
       // Simpan API agar bisa dikunci/dibuka mengikuti timer (poin 4).
       tabelIsiApi = tabelEl
       isi(wadahLembar,
-        el('div', { class: 'bagian-judul' }, `Tabel ${lembar.kode} — ${lembar.judul}`),
+        el('div', { class: 'bagian-judul' }, `${lembar.tipe === 'soal' ? 'Soal' : 'Tabel'} ${lembar.kode} — ${lembar.judul}`),
         lembar.keterangan
           ? el('p', { gaya: { fontSize: '13px', color: 'var(--tinta-lembut)', margin: '0 0 8px' } }, lembar.keterangan)
           : null,

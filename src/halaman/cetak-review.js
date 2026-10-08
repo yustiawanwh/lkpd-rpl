@@ -15,6 +15,8 @@ import { sb } from '../lib/supabase.js'
 import { el, isi, $, roti, dialog } from '../lib/dom.js'
 import { urlBukti } from '../lib/bukti.js'
 import { pesanGalat } from '../lib/kesalahan.js'
+import { soalKeHtmlCetak } from '../lib/soal.js'
+import { pasangKunciSoal } from '../rutin/lembar-kerja.js'
 
 // Ubah URL gambar menjadi data URL (base64) agar tersemat & bisa dilihat offline.
 async function gambarKeDataUrl(url) {
@@ -41,6 +43,16 @@ function tabelHtml(lembar, data) {
   const d = data ?? {}
   let struktur = lembar.struktur
   if (typeof struktur === 'string') { try { struktur = JSON.parse(struktur) } catch { struktur = {} } }
+  if (lembar.tipe === 'soal') return soalKeHtmlCetak({ ...lembar, struktur }, d)
+  if (lembar.tipe === 'referensi') {
+    const baca = struktur?.kolom_baca ?? [], kol = struktur?.kolom ?? []
+    if (!kol.length) return ''
+    const kepalaR = [...baca, ...kol.map(k => k.label ?? k.key)].map(h => `<th>${escapeHtml(h)}</th>`).join('')
+    const isiR = (struktur?.data ?? []).map((brs, i) => '<tr>' +
+      brs.map(c => `<td>${escapeHtml(c)}</td>`).join('') +
+      kol.map(k => `<td>${escapeHtml(d[String(i)]?.[k.key] ?? '')}</td>`).join('') + '</tr>').join('')
+    return `<table class="lk"><thead><tr>${kepalaR}</tr></thead><tbody>${isiR}</tbody></table>`
+  }
   const kolom = struktur?.kolom ?? []
   const baris = struktur?.baris ?? []
   const nBaris = baris.length || Number(struktur?.jumlah_baris ?? 0)
@@ -54,7 +66,7 @@ function tabelHtml(lembar, data) {
     const sel = kolom.map(k => `<td>${escapeHtml(d[String(i)]?.[k.key] ?? '')}</td>`).join('')
     barisHtml += `<tr><td class="lbl">${escapeHtml(label)}</td>${sel}</tr>`
   }
-  const kepala = kolom.map(k => `<th>${escapeHtml(k.judul ?? k.key)}</th>`).join('')
+  const kepala = kolom.map(k => `<th>${escapeHtml(k.label ?? k.judul ?? k.key)}</th>`).join('')
   return `<table class="lk"><thead><tr><th></th>${kepala}</tr></thead><tbody>${barisHtml}</tbody></table>`
 }
 
@@ -128,8 +140,9 @@ async function siapkanCetak(penugasanId, tpId, data, tugasDipilih) {
   const dipilih = data.filter(p => tugasDipilih.has(p.tugas_id))
 
   // Ambil semua lembar TP sekali (untuk pencocokan kode).
-  const { data: semuaLk } = await sb.from('lembar_kerja')
+  const { data: lkMentah } = await sb.from('lembar_kerja')
     .select('id, kode, judul, tipe, struktur').eq('tujuan_pembelajaran_id', tpId)
+  const semuaLk = await pasangKunciSoal(lkMentah ?? [])
 
   // Kelompokkan per tugas, di dalamnya urut absen.
   const grup = new Map()
@@ -231,6 +244,15 @@ function bukaCetak(bodyHtml) {
     .bukti-baris img { max-width: 30%; max-height: 220px; border: 1px solid #cbd5cf; border-radius: 6px; object-fit: contain; }
     .koreksi-kotak { margin-top: 8px; padding-top: 7px; border-top: 1px dashed #b7c6bc; font-size: 12px; }
     .k-nilai { font-weight: 600; margin-right: 18px; }
+    .soal-butir { border-left: 3px solid #cbd5cf; padding: 3px 0 3px 9px; margin: 6px 0; }
+    .soal-teks { font-size: 11.5px; } .soal-teks p { margin: 2px 0; }
+    .soal-teks pre { background: #f3f5f3; border: 1px solid #dce5df; border-radius: 4px; padding: 5px 7px; font-size: 10.5px; white-space: pre-wrap; margin: 3px 0; }
+    .soal-teks pre .kode-label { display: none; }
+    code.kode-inline { background: #f0f2f0; border-radius: 3px; padding: 0 3px; font-size: 10.5px; }
+    .soal-jawab { background: #fffbe8; border: 1px solid #eadfae; border-radius: 4px; padding: 4px 7px; font-size: 11.5px; white-space: pre-wrap; }
+    ul.soal-opsi { list-style: none; padding-left: 4px; margin: 3px 0; } ul.soal-opsi li { margin: 1px 0; }
+    .benar { color: #1B6B4F; font-weight: 700; } .salah { color: #A3342B; font-weight: 700; }
+    .soal-ringkas { font-weight: 600; font-size: 11.5px; margin: 2px 0 6px; }
     @media print { body { margin: 10mm; } .murid-blok { page-break-inside: avoid; } }
   `
   const tgl = new Date().toLocaleString('id-ID', { dateStyle: 'long', timeStyle: 'short' })

@@ -10,6 +10,148 @@ export const TIPE = {
   daftar:    'Daftar — baris bernomor',
   formulir:  'Formulir — label & isian',
   referensi: 'Referensi — tabel bacaan + kolom isian',
+  soal:      'Soal — butir bernomor (isian, pilihan ganda, centang)',
+}
+
+/* ==========================================================
+   LEMBAR JENIS "SOAL"
+   struktur = { soal: [ { id, no, jenis, teks, opsi?, kunci?, label? } ] }
+   Jawaban murid (isian_lembar.data) per butir, kunci = id butir:
+     singkat/panjang → { jawab: "teks" }
+     pg              → { pilih: "1" }        (indeks opsi, teks)
+     centang         → { pilih: [0, 2] }     (indeks opsi terpilih)
+     kolom           → { k0: "…", k1: "…" }  (kotak berdampingan)
+     info            → (tanpa jawaban)
+   ========================================================== */
+export const JENIS_SOAL = {
+  singkat: 'Isian singkat',
+  panjang: 'Isian panjang',
+  pg:      'Pilihan ganda (pilih satu)',
+  centang: 'Centang (boleh lebih dari satu)',
+  kolom:   'Kotak berdampingan (mis. Tebakan & Hasil)',
+  info:    'Petunjuk saja (tanpa jawaban)',
+}
+export const LABEL_TEBAK = ['Tebakan', 'Hasil sebenarnya']
+
+export function daftarSoal(lembar) { return strukturDari(lembar).soal ?? [] }
+
+export function idSoalBaru() {
+  return 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
+}
+
+/** Butir pilihan (pg/centang) yang punya kunci → benar/salah; selain itu null. */
+export function cekKunci(soal, jawaban) {
+  if (soal.jenis === 'pg') {
+    if (soal.kunci === null || soal.kunci === undefined || soal.kunci === '') return null
+    const p = jawaban?.pilih
+    if (p === undefined || p === null || p === '') return false
+    return Number(p) === Number(soal.kunci)
+  }
+  if (soal.jenis === 'centang') {
+    if (!Array.isArray(soal.kunci)) return null
+    const p = Array.isArray(jawaban?.pilih) ? jawaban.pilih.map(Number) : []
+    const a = [...new Set(p)].sort((x, y) => x - y), b = [...new Set(soal.kunci.map(Number))].sort((x, y) => x - y)
+    return a.length === b.length && a.every((v, i) => v === b[i])
+  }
+  return null
+}
+
+/** Ringkasan kunci: { benar, total } untuk butir yang punya kunci. */
+export function skorKunci(lembar, data) {
+  let benar = 0, total = 0
+  for (const s of daftarSoal(lembar)) {
+    const h = cekKunci(s, data?.[s.id])
+    if (h === null) continue
+    total++; if (h) benar++
+  }
+  return { benar, total }
+}
+
+const ALIAS_JENIS = {
+  singkat: 'singkat', pendek: 'singkat',
+  panjang: 'panjang', isian: 'panjang', uraian: 'panjang',
+  pg: 'pg', pilihan: 'pg', radio: 'pg', ganda: 'pg',
+  centang: 'centang', checkbox: 'centang', cek: 'centang',
+  tebak: 'kolom', kolom: 'kolom', kotak: 'kolom',
+  info: 'info', petunjuk: 'info', bacaan: 'info',
+}
+
+/**
+ * Mengurai teks impor menjadi larik butir soal. Format:
+ *
+ *   ### 2b | pg
+ *   Sebelum menjalankan, lingkari tebakan kalian:
+ *   - [ ] Error, karena ekskul adalah const
+ *   - [x] Berhasil, dan kuota menjadi 25      ← [x] = kunci (opsional)
+ *
+ *   ### 3g-1 | tebak                          ← dua kotak: Tebakan & Hasil
+ *   ### 2f | kolom: Method / Hasil            ← kotak dengan judul sendiri
+ *
+ * Jenis: singkat, panjang (bawaan), pg, centang, tebak, kolom, info.
+ * Baris "- [ ]" di dalam blok kode ``` tidak dianggap pilihan.
+ */
+export function uraiSoalTeks(teks) {
+  const baris = String(teks ?? '').replace(/\r/g, '').split('\n')
+  const hasil = []
+  let cur = null, dalamKode = false
+  const tutup = () => {
+    if (!cur) return
+    cur.teks = cur._teks.join('\n').replace(/^\n+|\s+$/g, '')
+    delete cur._teks
+    if (cur.jenis === 'pg') {
+      const k = cur._kunci; cur.kunci = k.length ? k[0] : null
+    } else if (cur.jenis === 'centang') {
+      cur.kunci = cur._kunci.length ? cur._kunci : null
+    }
+    delete cur._kunci
+    if (!['pg', 'centang'].includes(cur.jenis)) delete cur.opsi
+    if (cur.jenis !== 'kolom') delete cur.label
+    hasil.push(cur); cur = null
+  }
+  for (const b of baris) {
+    if (/^\s*```/.test(b)) dalamKode = !dalamKode
+    const h = !dalamKode && b.match(/^###\s*([^|]*?)\s*(?:\|\s*([A-Za-z]+)\s*(?::\s*(.*))?)?\s*$/)
+    if (h && !/^\s*```/.test(b)) {
+      tutup()
+      const jenis = ALIAS_JENIS[(h[2] ?? 'panjang').toLowerCase()] ?? 'panjang'
+      let label = h[3] ? h[3].split('/').map(x => x.trim()).filter(Boolean) : null
+      if (jenis === 'kolom' && (!label || label.length < 2)) {
+        label = (h[2] ?? '').toLowerCase() === 'tebak' || !label ? [...LABEL_TEBAK] : [...label, 'Jawaban']
+      }
+      cur = { id: idSoalBaru() + hasil.length, no: h[1].trim(), jenis, _teks: [], opsi: [], _kunci: [], label }
+      continue
+    }
+    const o = !dalamKode && cur && b.match(/^\s*-\s*\[( |x|X)\]\s?(.*)$/)
+    if (o) {
+      if (o[1].toLowerCase() === 'x') cur._kunci.push(cur.opsi.length)
+      cur.opsi.push(o[2].trim())
+      continue
+    }
+    if (!cur) {
+      if (b.trim() === '') continue
+      cur = { id: idSoalBaru() + hasil.length, no: '', jenis: 'info', _teks: [], opsi: [], _kunci: [], label: null }
+    }
+    cur._teks.push(b)
+  }
+  tutup()
+  return hasil
+}
+
+/** Kebalikan uraiSoalTeks — untuk menyunting ulang sebagai teks. */
+export function soalKeTeks(daftar) {
+  const nama = { singkat: 'singkat', panjang: 'panjang', pg: 'pg', centang: 'centang', kolom: 'kolom', info: 'info' }
+  return (daftar ?? []).map(s => {
+    let kepala = `### ${s.no ?? ''} | ${nama[s.jenis] ?? 'panjang'}`
+    if (s.jenis === 'kolom') kepala += ': ' + (s.label ?? LABEL_TEBAK).join(' / ')
+    const bagian = [kepala]
+    if (s.teks) bagian.push(s.teks)
+    if (s.jenis === 'pg' || s.jenis === 'centang') {
+      const kunci = (s.jenis === 'pg' ? [s.kunci] : (Array.isArray(s.kunci) ? s.kunci : []))
+        .filter(k => k !== null && k !== undefined && k !== '').map(Number)
+      ;(s.opsi ?? []).forEach((o, i) => bagian.push(`- [${kunci.includes(i) ? 'x' : ' '}] ${o}`))
+    }
+    return bagian.join('\n')
+  }).join('\n\n')
 }
 
 export const INPUT = {
@@ -44,6 +186,7 @@ export function kolomBaca(l)       { return strukturDari(l).kolom_baca ?? [] }
  * Jenis lain: wajib punya kolom isian dan baris.
  */
 export function strukturSiap(lembar) {
+  if (lembar?.tipe === 'soal') return daftarSoal(lembar).length > 0
   if (lembar?.tipe === 'referensi') {
     return kolomBaca(lembar).length > 0 && dataReferensi(lembar).length > 0
   }
@@ -73,6 +216,7 @@ export function jumlahBaris(lembar) {
     case 'matriks':
     case 'formulir':  return (s.baris ?? []).length
     case 'referensi': return (s.data ?? []).length
+    case 'soal':      return (s.soal ?? []).length
     default:          return Number(s.jumlah_baris ?? 5)
   }
 }
@@ -119,6 +263,8 @@ export function periksaStruktur(tipe, struktur) {
   const galat = []
   const kol = struktur?.kolom ?? []
 
+  if (tipe === 'soal') return periksaSoal(struktur?.soal ?? [])
+
   if (tipe !== 'referensi' && kol.length === 0) {
     galat.push('Tabel harus punya minimal satu kolom.')
   }
@@ -162,5 +308,26 @@ export function periksaStruktur(tipe, struktur) {
     })
   }
 
+  return galat
+}
+
+function periksaSoal(daftar) {
+  const galat = []
+  if (!daftar.length) galat.push('Lembar soal harus punya minimal satu butir.')
+  daftar.forEach((q, i) => {
+    const nama = `Butir ${q.no || i + 1}`
+    if (!(q.jenis in JENIS_SOAL)) galat.push(`${nama}: jenis jawaban tidak dikenal.`)
+    if (!String(q.teks ?? '').trim() && !(q.opsi ?? []).length) galat.push(`${nama}: pertanyaan masih kosong.`)
+    if (q.jenis === 'pg' || q.jenis === 'centang') {
+      const n = (q.opsi ?? []).filter(o => String(o).trim()).length
+      if (n < 2) galat.push(`${nama}: pilihan jawaban minimal 2.`)
+      if (q.jenis === 'pg' && q.kunci !== null && q.kunci !== undefined && !(q.kunci >= 0 && q.kunci < n)) {
+        galat.push(`${nama}: kunci jawaban tidak cocok dengan pilihan.`)
+      }
+    }
+    if (q.jenis === 'kolom' && !((q.label ?? []).length >= 1)) galat.push(`${nama}: kotak jawaban belum diberi judul.`)
+  })
+  const id = daftar.map(q => q.id)
+  if (new Set(id).size !== id.length) galat.push('Ada dua butir dengan penanda yang sama.')
   return galat
 }

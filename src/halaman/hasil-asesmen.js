@@ -34,13 +34,19 @@ export async function halamanHasilAsesmen(wadah, asesmenId) {
   try {
     const [{ data: a, error: e1 }, { data: s, error: e2 }, { data: jw, error: e3 }] = await Promise.all([
       sb.from('asesmen').select('id, judul, jenis, tujuan_pembelajaran(kode), kelas(nama)').eq('id', asesmenId).single(),
-      sb.from('asesmen_soal').select('id, tipe, teks, opsi, kunci, urutan').eq('asesmen_id', asesmenId).order('urutan'),
+      sb.from('asesmen_soal').select('id, tipe, teks, opsi, urutan').eq('asesmen_id', asesmenId).order('urutan'),
       sb.from('asesmen_jawaban').select('soal_id, murid_id, jawaban, dijawab_pada, profil:murid_id(nama, no_absen)').eq('asesmen_id', asesmenId),
     ])
     if (e1) throw e1
     if (e2) throw e2
     if (e3) throw e3
     asesmen = a; soal = s ?? []; jawaban = jw ?? []
+    // Kunci dari tabel khusus guru (asesmen_kunci).
+    if (soal.length) {
+      const { data: k } = await sb.from('asesmen_kunci').select('soal_id, kunci').in('soal_id', soal.map(x => x.id))
+      const peta = new Map((k ?? []).map(r => [r.soal_id, r.kunci]))
+      soal = soal.map(x => ({ ...x, kunci: peta.get(x.id) ?? null }))
+    }
   } catch (err) {
     isi(wadah, el('div', { class: 'panel' }, el('div', { class: 'panel-isi' },
       el('div', { class: 'pesan pesan-galat' }, pesanGalat(err))))); return

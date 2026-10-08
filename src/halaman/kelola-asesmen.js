@@ -184,6 +184,12 @@ export async function halamanSuntingAsesmen(wadah, asesmenId) {
     if (e1) throw e1
     if (e2) throw e2
     asesmen = a; soal = s ?? []
+    // Kunci ada di tabel asesmen_kunci (hanya guru/admin yang bisa membaca).
+    if (soal.length) {
+      const { data: k } = await sb.from('asesmen_kunci').select('soal_id, kunci').in('soal_id', soal.map(x => x.id))
+      const peta = new Map((k ?? []).map(r => [r.soal_id, r.kunci]))
+      soal = soal.map(x => ({ ...x, kunci: peta.get(x.id) ?? x.kunci ?? null }))
+    }
   } catch (err) {
     isi(wadah, el('div', { class: 'panel' }, el('div', { class: 'panel-isi' },
       el('div', { class: 'pesan pesan-galat' }, pesanGalat(err))))); return
@@ -312,13 +318,14 @@ async function dialogSoal(wadah, asesmenId, s = null) {
           if (!(mx > mn)) { roti('Rentang skala tidak valid', '⚠'); return }
           opsi = { min: mn, max: mx, label_min: fLabelMin.value.trim() || null, label_maks: fLabelMax.value.trim() || null }
         }
+        const kunciBaru = fTipe.value === 'skala' ? null : (fKunci.value.trim() || null)
         const rec = {
           asesmen_id: asesmenId, tipe: fTipe.value, teks: fTeks.value.trim(),
-          opsi, kunci: fTipe.value === 'skala' ? null : (fKunci.value.trim() || null),
-          wajib: fWajib.checked,
+          opsi, wajib: fWajib.checked,
         }
         e.target.disabled = true
         try {
+          let idSoal = s?.id
           if (s) {
             const { error } = await sb.from('asesmen_soal').update(rec).eq('id', s.id)
             if (error) throw error
@@ -326,9 +333,16 @@ async function dialogSoal(wadah, asesmenId, s = null) {
             const { count } = await sb.from('asesmen_soal')
               .select('id', { count: 'exact', head: true }).eq('asesmen_id', asesmenId)
             rec.urutan = count ?? 0
-            const { error } = await sb.from('asesmen_soal').insert(rec)
+            const { data: baru, error } = await sb.from('asesmen_soal').insert(rec).select('id').single()
             if (error) throw error
+            idSoal = baru.id
           }
+          // Kunci disimpan terpisah (tabel asesmen_kunci, hanya guru/admin).
+          const { error: eK } = kunciBaru
+            ? await sb.from('asesmen_kunci').upsert({ soal_id: idSoal, kunci: kunciBaru, diubah_pada: new Date().toISOString() })
+            : await sb.from('asesmen_kunci').delete().eq('soal_id', idSoal)
+          if (eK) throw new Error('Soal tersimpan, tetapi kunci gagal disimpan: ' + pesanGalat(eK) +
+            '. Pastikan migrasi 20260101002700_kunci_rahasia.sql sudah dijalankan.')
           tutup(); halamanSuntingAsesmen(wadah, asesmenId)
         } catch (err) {
           e.target.disabled = false

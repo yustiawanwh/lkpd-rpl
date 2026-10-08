@@ -18,6 +18,8 @@ import { halamanDashboard } from './dashboard.js'
 import { ambilSemua } from '../rutin/papan.js'
 import { jarakSidik } from './tiket.js'
 import { urlBukti } from '../lib/bukti.js'
+import { buatFormSoal } from '../lib/soal.js'
+import { pasangKunciSoal } from '../rutin/lembar-kerja.js'
 
 export async function halamanGuru(wadah, r) {
   const tampilan = r.nama || 'kelas'
@@ -1325,6 +1327,7 @@ async function muridMirip(penugasanId, kelasId) {
       for (const baris of kunci) {
         const ra = a?.[baris] ?? {}, rb = b?.[baris] ?? {}
         for (const kol of new Set([...Object.keys(ra), ...Object.keys(rb)])) {
+          if (kol === 'pilih') continue   // jawaban pilihan ganda/centang wajar sama
           const va = String(ra[kol] ?? '').trim(), vb = String(rb[kol] ?? '').trim()
           if (va === '' && vb === '') continue
           total++; if (va !== '' && va === vb) sama++
@@ -1434,6 +1437,7 @@ async function halamanKemiripan(wadah, penugasanId) {
       const ra = a?.[baris] ?? {}, rb = b?.[baris] ?? {}
       const kolom = new Set([...Object.keys(ra), ...Object.keys(rb)])
       for (const kol of kolom) {
+          if (kol === 'pilih') continue   // jawaban pilihan ganda/centang wajar sama
         const va = String(ra[kol] ?? '').trim(), vb = String(rb[kol] ?? '').trim()
         if (va === '' && vb === '') continue
         total++
@@ -1532,7 +1536,7 @@ async function muatKoreksi(p, tpId, penugasanId) {
         .select('id, kode, judul, tipe, struktur')
         .eq('tujuan_pembelajaran_id', tpId)
       const urut = {}; kodeLembar.forEach((k, i) => { urut[k] = i })
-      const lkTerurut = (semuaLk ?? [])
+      const lkTerurut = (await pasangKunciSoal(semuaLk ?? []))
         .filter(lk => kodeLembar.includes((lk.kode ?? '').toUpperCase()))
         .sort((x, y) =>
           (urut[(x.kode ?? '').toUpperCase()] ?? 99) - (urut[(y.kode ?? '').toUpperCase()] ?? 99))
@@ -1585,6 +1589,18 @@ function tabelKoreksi(lembar, data) {
   const d = data ?? {}
   let struktur = lembar.struktur
   if (typeof struktur === 'string') { try { struktur = JSON.parse(struktur) } catch { struktur = {} } }
+  if (lembar.tipe === 'soal') {
+    return buatFormSoal({ ...lembar, struktur }, d, () => {}, { bacaSaja: true, tampilKunci: true })
+  }
+  if (lembar.tipe === 'referensi') {
+    const baca = struktur?.kolom_baca ?? [], isiRef = struktur?.data ?? [], kol = struktur?.kolom ?? []
+    if (!kol.length) return el('div', { class: 'koreksi-kosong' }, 'Tabel bacaan (tanpa isian murid).')
+    return el('div', { class: 'tabel-bungkus' }, el('table', { class: 'lk' },
+      el('thead', {}, el('tr', {}, ...baca.map(h => el('th', {}, h)), ...kol.map(k => el('th', {}, k.label)))),
+      el('tbody', {}, ...isiRef.map((brs, i) => el('tr', {},
+        ...brs.map(c => el('td', {}, c)),
+        ...kol.map(k => el('td', {}, el('div', { class: 'baca-saja' }, d[String(i)]?.[k.key] ?? '—'))))))))
+  }
   const kolom = struktur?.kolom ?? []
   const baris = struktur?.baris ?? []
   const nBaris = baris.length || Number(struktur?.jumlah_baris ?? 0)

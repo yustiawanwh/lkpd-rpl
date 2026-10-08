@@ -6,6 +6,7 @@
  * memecah per sel.
  */
 import { sb } from '../lib/supabase.js'
+import { buatFormSoal } from '../lib/soal.js'
 
 export async function muatLembar(tpId, penugasanId) {
   if (tpId == null || penugasanId == null) {
@@ -291,7 +292,9 @@ export function buatTabelIsi(lembar, ctx) {
   }
 
   let tabel
-  if (lembar.tipe === 'referensi') {
+  if (lembar.tipe === 'soal') {
+    tabel = buatFormSoal(lembar, data, ubah, { bacaSaja })
+  } else if (lembar.tipe === 'referensi') {
     const baca = LK.kolomBaca(lembar); const isiRef = LK.dataReferensi(lembar)
     tabel = el('table', { class: 'lk' },
       el('thead', {}, el('tr', {}, ...baca.map(h => el('th', {}, h)), ...kolom.map(k => el('th', {}, k.label)))),
@@ -314,7 +317,7 @@ export function buatTabelIsi(lembar, ctx) {
   tanda = el('span', { class: 'simpan-tanda' }, 'Tersimpan otomatis')
   const bungkus = el('div', {},
     el('div', { gaya: { display: 'flex', justifyContent: 'flex-end', marginBottom: '6px' } }, tanda),
-    el('div', { class: 'tabel-bungkus' }, tabel))
+    lembar.tipe === 'soal' ? tabel : el('div', { class: 'tabel-bungkus' }, tabel))
 
   // Bila pemanggil ingin bisa mengubah status baca-saja secara dinamis
   // (mis. mengikuti timer di tiket), sediakan API. Ini menonaktifkan atau
@@ -349,4 +352,24 @@ export async function muatLembarSatu(tpId, penugasanId, kode) {
     .eq('lembar_kerja_id', lembar.id)
     .maybeSingle()
   return { ...lembar, isian: isian ?? null }
+}
+
+/**
+ * Pasang kunci jawaban lembar Soal (khusus guru/admin). Kunci disimpan di
+ * tabel kunci_lembar yang RLS-nya menolak murid, jadi bagi murid fungsi ini
+ * tidak menambah apa-apa. Mengembalikan salinan daftar lembar.
+ */
+export async function pasangKunciSoal(daftar) {
+  const ids = (daftar ?? []).filter(l => l?.tipe === 'soal').map(l => l.id)
+  if (!ids.length) return daftar ?? []
+  const { data, error } = await sb.from('kunci_lembar').select('lembar_kerja_id, kunci').in('lembar_kerja_id', ids)
+  if (error) return daftar   // mis. migrasi belum dijalankan: tampil tanpa kunci
+  const peta = new Map((data ?? []).map(r => [r.lembar_kerja_id, r.kunci ?? {}]))
+  return daftar.map(l => {
+    if (l?.tipe !== 'soal' || !peta.has(l.id)) return l
+    let st = l.struktur
+    if (typeof st === 'string') { try { st = JSON.parse(st) } catch { st = {} } }
+    const k = peta.get(l.id)
+    return { ...l, struktur: { ...st, soal: (st?.soal ?? []).map(q => (q.id in k ? { ...q, kunci: k[q.id] } : q)) } }
+  })
 }
