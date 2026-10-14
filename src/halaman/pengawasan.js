@@ -12,6 +12,7 @@ import { pesanGalat } from '../lib/kesalahan.js'
 import { formatWaktu } from '../lib/pangkat.js'
 import { keadaan, pergiKe } from '../main.js'
 import { ambilSemua } from '../rutin/papan.js'
+import { teksNilai } from '../lib/nilai.js'
 
 const STATUS_LABEL = {
   backlog: 'Backlog', dikerjakan: 'Dikerjakan', review: 'Menunggu review', selesai: 'Selesai',
@@ -48,7 +49,7 @@ export async function halamanPengawasan(wadah, kelasId) {
     // Pakai ambilSemua agar TIDAK terpotong batas 1000 baris — kalau terpotong,
     // sebagian murid tampil kosong padahal punya progres (bug "kolom kosong").
     progres = await ambilSemua(() => sb.from('progres_tugas')
-      .select('id, murid_id, tugas_id, status, nilai_huruf, detik_terpakai, dimulai_pada, penugasan_id, tugas:tugas_id(kode, judul, jenis)')
+      .select('id, murid_id, tugas_id, status, nilai_huruf, nilai_angka, detik_terpakai, dimulai_pada, penugasan_id, tugas:tugas_id(kode, judul, jenis)')
       .in('penugasan_id', penIds))
   }
 
@@ -145,7 +146,7 @@ export async function halamanPengawasan(wadah, kelasId) {
     const kartuTugas = (p, opsi = {}) => el('div', { class: 'kanban-tugas' + (opsi.kelas ? ' ' + opsi.kelas : '') },
       el('span', { class: 'mono kanban-tugas-kode' }, p.tugas?.kode ?? ''),
       el('span', { class: 'kanban-tugas-judul' }, p.tugas?.judul ?? '—'),
-      p.nilai_huruf && el('span', { class: 'lencana-nilai' }, p.nilai_huruf),
+      p.nilai_huruf && el('span', { class: 'lencana-nilai' }, teksNilai(p)),
     )
 
     const kolom = (daftar, kelas, kosong) =>

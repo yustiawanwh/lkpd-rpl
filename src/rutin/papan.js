@@ -8,7 +8,7 @@
  */
 import { sb } from '../lib/supabase.js'
 import { nilaiKetepatanKumpul, KETEPATAN_TELAT_BAWAAN } from '../lib/ranah.js'
-import { NILAI_HURUF } from '../lib/nilai.js'
+import { NILAI_HURUF, nilaiProgres } from '../lib/nilai.js'
 
 /**
  * Ambil SEMUA baris dari sebuah query Supabase, melewati batas default
@@ -227,7 +227,7 @@ export async function rekapNilaiPerSprint(penugasanId, tpId) {
   //    bisa > 1000 baris → sebelumnya membuat sebagian murid bernilai 0).
   const progres = await ambilSemua(() => sb
     .from('progres_tugas')
-    .select('murid_id, tugas_id, status, nilai_huruf, diserahkan_pada, profil:murid_id(nama, no_absen)')
+    .select('murid_id, tugas_id, status, nilai_huruf, nilai_angka, diserahkan_pada, profil:murid_id(nama, no_absen)')
     .eq('penugasan_id', penugasanId)
     .eq('status', 'selesai'))
 
@@ -266,7 +266,7 @@ export async function rekapNilaiPerSprint(penugasanId, tpId) {
       if (!m.perSprint[sprintInti]) m.perSprint[sprintInti] = { huruf: [], badge: 0, serahTerakhir: null, tantanganDinilai: 0 }
       const ps = m.perSprint[sprintInti]
       ps.selesai = (ps.selesai ?? 0) + 1
-      if (p.nilai_huruf) ps.huruf.push(p.nilai_huruf)
+      if (p.nilai_huruf) ps.huruf.push(nilaiProgres(p))   // angka bila guru memberi angka
       if (p.diserahkan_pada) {
         const t = new Date(p.diserahkan_pada)
         if (!ps.serahTerakhir || t > ps.serahTerakhir) ps.serahTerakhir = t
@@ -352,7 +352,7 @@ export async function rekapTigaRanah(penugasanId, tpId, nilaiTelat = KETEPATAN_T
   const [{ data: pen }, progres, { data: badges }, { data: perolehanData }] = await Promise.all([
     sb.from('penugasan').select('tenggat, tenggat_sprint, mulai, dibuat_pada, kelas_id, tujuan_pembelajaran_id').eq('id', penugasanId).single(),
     ambilSemua(() => sb.from('progres_tugas')
-      .select('murid_id, tugas_id, status, nilai_huruf, diserahkan_pada, detik_terpakai, profil:murid_id(nama, no_absen)')
+      .select('murid_id, tugas_id, status, nilai_huruf, nilai_angka, diserahkan_pada, detik_terpakai, profil:murid_id(nama, no_absen)')
       .eq('penugasan_id', penugasanId)),
     sb.from('badge').select('id, syarat').eq('tujuan_pembelajaran_id', tpId),
     ambilSemua(() => sb.from('perolehan_badge').select('murid_id, badge_id').eq('penugasan_id', penugasanId)),
@@ -428,7 +428,7 @@ export async function rekapTigaRanah(penugasanId, tpId, nilaiTelat = KETEPATAN_T
 
     // Kognitif / Psikomotor: simpan nilai ANGKA tugas yang sudah dinilai.
     if (p.nilai_huruf) {
-      const angka = NILAI_HURUF[p.nilai_huruf] ?? 0
+      const angka = p.nilai_angka ?? NILAI_HURUF[p.nilai_huruf] ?? 0
       if (info.ranah === 'kognitif') m.nilaiKognitif[p.tugas_id] = angka
       else if (info.ranah === 'psikomotor') m.nilaiPsikomotor[p.tugas_id] = angka
     }

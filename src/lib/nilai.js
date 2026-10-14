@@ -38,8 +38,28 @@ export const LABEL_HURUF = {
 export function nilaiReview(hurufList, intiTotal) {
   const total = Math.max(intiTotal ?? hurufList.length, hurufList.length)
   if (total === 0) return 0
-  const jumlah = hurufList.reduce((n, h) => n + (NILAI_HURUF[h] ?? 0), 0)
+  // Isi daftar boleh huruf (A–E) atau angka 0–100 (nilai angka dari guru).
+  const jumlah = hurufList.reduce((n, h) => n + angkaDariNilai(h), 0)
   return jumlah / total
+}
+
+/** Huruf A–E → angka bawaan; angka 0–100 dipakai apa adanya. */
+export function angkaDariNilai(h) {
+  if (typeof h === 'number' && Number.isFinite(h)) return h
+  return NILAI_HURUF[h] ?? 0
+}
+
+/** Nilai satu progres untuk perhitungan: angka bila ada, selain itu huruf. */
+export function nilaiProgres(p) {
+  if (p?.nilai_angka !== null && p?.nilai_angka !== undefined) return Number(p.nilai_angka)
+  return p?.nilai_huruf ?? null
+}
+
+/** Teks nilai untuk tampilan: "87 · B" bila guru memberi angka, selain itu "B". */
+export function teksNilai(p) {
+  if (!p?.nilai_huruf && (p?.nilai_angka === null || p?.nilai_angka === undefined)) return ''
+  if (p.nilai_angka !== null && p.nilai_angka !== undefined) return `${p.nilai_angka} · ${p.nilai_huruf ?? ''}`.trim()
+  return p.nilai_huruf
 }
 
 /**

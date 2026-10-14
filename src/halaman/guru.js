@@ -19,6 +19,7 @@ import { ambilSemua } from '../rutin/papan.js'
 import { jarakSidik } from './tiket.js'
 import { urlBukti } from '../lib/bukti.js'
 import { buatFormSoal } from '../lib/soal.js'
+import { teksNilai } from '../lib/nilai.js'
 import { pasangKunciSoal } from '../rutin/lembar-kerja.js'
 
 export async function halamanGuru(wadah, r) {
@@ -787,7 +788,7 @@ async function detilKelas(wadah, kelasId) {
           return
         }
         const { data, error } = await sb.from('progres_tugas')
-          .select('id, status, terkunci, nilai_huruf, tugas:tugas_id(kode, judul, jenis)')
+          .select('id, status, terkunci, nilai_huruf, nilai_angka, tugas:tugas_id(kode, judul, jenis)')
           .eq('murid_id', m.profil.id).in('penugasan_id', penIds)
           .order('id')
         if (error) throw error
@@ -812,7 +813,7 @@ async function detilKelas(wadah, kelasId) {
             p.tugas?.kode ?? ''),
           el('div', { gaya: { fontSize: '13px', fontWeight: '600' } }, p.tugas?.judul ?? '—')),
         el('span', { class: 'lencana lencana-' + p.status }, LABEL_STATUS[p.status] ?? p.status),
-        p.nilai_huruf && el('span', { class: 'lencana-nilai', gaya: { background: 'var(--kertas)' } }, p.nilai_huruf),
+        p.nilai_huruf && el('span', { class: 'lencana-nilai', gaya: { background: 'var(--kertas)' } }, teksNilai(p)),
         p.terkunci
           ? el('button', { class: 'tbl tbl-kecil tbl-utama', onClick: () => bukaKunci(p) }, '🔓 Buka kunci')
           : el('span', { gaya: { fontSize: '11.5px', color: 'var(--tinta-lembut)' } }, 'terbuka'),
@@ -1068,7 +1069,7 @@ async function arsipDinilai(wadah, penugasanId) {
 
   const { data, error } = await sb
     .from('progres_tugas')
-    .select('id, status, detik_terpakai, catatan, diserahkan_pada, disetujui_pada, murid_id, tugas_id, nilai_huruf, umpan_balik, terkunci, profil:murid_id(nama, no_absen), tugas(kode, judul, xp, estimasi_menit, bukti_diminta, lembar_kode, urutan, sprint(nomor, nama))')
+    .select('id, status, detik_terpakai, catatan, diserahkan_pada, disetujui_pada, murid_id, tugas_id, nilai_huruf, nilai_angka, umpan_balik, terkunci, profil:murid_id(nama, no_absen), tugas(kode, judul, xp, estimasi_menit, bukti_diminta, lembar_kode, urutan, sprint(nomor, nama))')
     .eq('penugasan_id', penugasanId)
     .not('nilai_huruf', 'is', null)
     .order('disetujui_pada', { ascending: false })
@@ -1187,6 +1188,26 @@ function kartuMuridArsip(k, penugasanId, tpId, wadah, miripMap = null) {
   return el('div', { class: 'grup-murid' }, kepala, isiTugas)
 }
 
+// Kotak nilai angka 0–100 (pelengkap tombol A–E). Enter atau tombol "Nilai" menyimpan.
+function kotakNilaiAngka(simpan, awal = null) {
+  const input = el('input', { type: 'number', min: '0', max: '100', step: '1', inputmode: 'numeric',
+    class: 'nilai-angka-input', placeholder: '0–100', 'aria-label': 'Nilai angka 0 sampai 100',
+    value: awal ?? '' })
+  const kirim = () => {
+    const t = input.value.trim()
+    const n = Number(t)
+    if (t === '' || !Number.isInteger(n) || n < 0 || n > 100) {
+      roti('Nilai angka harus bilangan bulat 0–100', '⚠'); input.focus(); return
+    }
+    simpan(n)
+  }
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); kirim() } })
+  return el('div', { class: 'nilai-angka' },
+    el('span', { class: 'nilai-angka-atau' }, 'atau'),
+    input,
+    el('button', { class: 'tbl tbl-kecil tbl-utama', title: 'Simpan nilai angka', onClick: kirim }, 'Nilai'))
+}
+
 function kartuArsip(p, penugasanId, wadah, miripNama = null) {
   const mirip = miripNama && miripNama.size > 0
   const LABEL = { A: 'Sempurna', B: 'Bagus', C: 'Cukup', D: 'Kurang', E: 'Tidak lulus' }
@@ -1200,6 +1221,17 @@ function kartuArsip(p, penugasanId, wadah, miripNama = null) {
       })
       if (error) throw error
       roti(`${p.tugas.kode} diperbarui menjadi ${huruf}`)
+      arsipDinilai(wadah, penugasanId)
+    } catch (err) { roti(pesanGalat(err), '⚠') }
+  }
+
+  async function beriNilaiAngkaUlang(angka) {
+    try {
+      const { error } = await sb.rpc('nilai_tugas_angka', {
+        p_progres: p.id, p_angka: angka, p_umpan: umpan.value.trim() || null,
+      })
+      if (error) throw error
+      roti(`${p.tugas.kode} diperbarui menjadi ${angka}`)
       arsipDinilai(wadah, penugasanId)
     } catch (err) { roti(pesanGalat(err), '⚠') }
   }
@@ -1226,7 +1258,7 @@ function kartuArsip(p, penugasanId, wadah, miripNama = null) {
             '🔍 Mirip dengan: ' + [...miripNama].join(', '))),
         el('div', { gaya: { textAlign: 'right' } },
           el('span', { class: 'lencana-nilai nilai-' + p.nilai_huruf, gaya: { fontSize: '15px', padding: '4px 10px' } },
-            `${p.nilai_huruf} · ${LABEL[p.nilai_huruf] ?? ''}`),
+            p.nilai_angka != null ? `${p.nilai_angka} · ${p.nilai_huruf}` : `${p.nilai_huruf} · ${LABEL[p.nilai_huruf] ?? ''}`),
           el('div', { gaya: { fontSize: '11px', color: 'var(--tinta-lembut)', marginTop: '3px' } },
             p.terkunci ? '🔒 terkunci' : 'terbuka')),
       ),
@@ -1247,6 +1279,7 @@ function kartuArsip(p, penugasanId, wadah, miripNama = null) {
           ...['A','B','C','D','E'].map(h =>
             el('button', { class: 'tbl tbl-kecil nilai-tbl nilai-' + h,
               title: LABEL[h], onClick: () => beriNilaiUlang(h) }, h))),
+        kotakNilaiAngka(beriNilaiAngkaUlang, p.nilai_angka),
         p.terkunci && el('button', { class: 'tbl tbl-kecil', gaya: { marginLeft: 'auto' },
           onClick: bukaKunci }, '🔓 Buka kunci'),
       ),
@@ -1672,6 +1705,17 @@ function kartuReview(p, penugasanId, wadah, miripNama = null) {
     } catch (err) { roti(pesanGalat(err), '⚠') }
   }
 
+  async function beriNilaiAngka(angka) {
+    try {
+      const { error } = await sb.rpc('nilai_tugas_angka', {
+        p_progres: p.id, p_angka: angka, p_umpan: umpan.value.trim() || null,
+      })
+      if (error) throw error
+      roti(`${p.tugas.kode} dinilai ${angka} — dikunci`)
+      lepasKartu()
+    } catch (err) { roti(pesanGalat(err), '⚠') }
+  }
+
   async function kembalikan() {
     if (!umpan.value.trim()) {
       roti('Tulis dulu umpan baliknya supaya murid tahu apa yang perlu diperbaiki', '⚠')
@@ -1729,6 +1773,7 @@ function kartuReview(p, penugasanId, wadah, miripNama = null) {
             el('button', { class: 'tbl tbl-kecil nilai-tbl nilai-' + h,
               title: { A:'Sempurna', B:'Bagus', C:'Cukup', D:'Kurang', E:'Tidak lulus' }[h],
               onClick: () => beriNilai(h) }, h))),
+        kotakNilaiAngka(beriNilaiAngka),
         el('button', { class: 'tbl tbl-kecil tbl-bahaya', gaya: { marginLeft: 'auto' },
           onClick: kembalikan }, 'Kembalikan'),
       ),

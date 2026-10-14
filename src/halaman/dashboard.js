@@ -47,7 +47,7 @@ export async function halamanDashboard(wadah) {
   let progres = [], stat = [], daftar = [], tugasInti = []
   try {
     const [progresD, statD, daftarD, rt] = await Promise.all([
-      ambilSemua(() => sb.from('progres_tugas').select('penugasan_id, murid_id, tugas_id, status, nilai_huruf').in('penugasan_id', penIds)),
+      ambilSemua(() => sb.from('progres_tugas').select('penugasan_id, murid_id, tugas_id, status, nilai_huruf, nilai_angka').in('penugasan_id', penIds)),
       ambilSemua(() => sb.from('statistik_murid').select('penugasan_id, murid_id, total_xp, jumlah_badge, tugas_selesai, total_detik, profil:murid_id(nama, no_absen)').in('penugasan_id', penIds)),
       ambilSemua(() => sb.from('pendaftaran').select('kelas_id, murid_id, denyut_pada, profil:murid_id(nama, no_absen)').in('kelas_id', penugasan.map(p => p.kelas_id))),
       sb.from('sprint').select('id, tujuan_pembelajaran_id, tugas(id, jenis)').in('tujuan_pembelajaran_id', tpIds),

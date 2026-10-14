@@ -427,7 +427,8 @@ export function dialogTiket(tugas, saatBerubah) {
       el('div', { class: 'umpan-guru-kepala' },
         el('span', {}, '💬 Dari gurumu'),
         nilaiHuruf && el('span', { class: 'lencana-nilai nilai-' + nilaiHuruf },
-          `Nilai ${nilaiHuruf}` + (LABEL_HURUF[nilaiHuruf] ? ` · ${LABEL_HURUF[nilaiHuruf]}` : ''))),
+          (pr.nilai_angka != null ? `Nilai ${pr.nilai_angka} (${nilaiHuruf})` : `Nilai ${nilaiHuruf}`) +
+          (LABEL_HURUF[nilaiHuruf] ? ` · ${LABEL_HURUF[nilaiHuruf]}` : ''))),
       umpanGuru
         ? el('div', { class: 'umpan-guru-isi' }, umpanGuru)
         : el('div', { class: 'umpan-guru-isi', gaya: { fontStyle: 'italic', color: 'var(--tinta-lembut)' } },
@@ -487,7 +488,7 @@ export function dialogTiket(tugas, saatBerubah) {
                            fontSize: '13px', color: 'var(--tinta-lembut)' } },
         el('span', {}, '🔒'),
         el('span', {}, tugas.progres?.nilai_huruf
-          ? `Sudah dinilai ${tugas.progres.nilai_huruf} & dikunci. Hubungi gurumu bila perlu diperbaiki.`
+          ? `Sudah dinilai ${tugas.progres.nilai_angka != null ? tugas.progres.nilai_angka + ' (' + tugas.progres.nilai_huruf + ')' : tugas.progres.nilai_huruf} & dikunci. Hubungi gurumu bila perlu diperbaiki.`
           : 'Tugas ini terkunci. Hanya gurumu yang bisa membukanya.'),
         el('button', { class: 'tbl tbl-kecil', gaya: { marginLeft: 'auto' }, onClick: () => tutup() }, 'Tutup'))]
     : [

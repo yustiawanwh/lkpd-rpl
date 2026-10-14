@@ -906,3 +906,9 @@ body.anti-salin-aktif [contenteditable="true"]{-webkit-user-select:text;-moz-use
 .soal-format{font-size:12px;margin-bottom:6px}
 .soal-format summary{cursor:pointer;color:var(--hijau-terang);font-weight:600}
 .soal-format pre{background:var(--putih);border:1px solid var(--garis);border-radius:6px;padding:8px;font-size:11.5px;white-space:pre-wrap;margin:6px 0 0}
+
+/* Nilai angka 0–100 (pelengkap tombol A–E) */
+.nilai-angka{display:inline-flex;gap:6px;align-items:center}
+.nilai-angka-atau{font-size:12px;color:var(--tinta-lembut)}
+.nilai-angka-input{width:78px;padding:4px 8px;font-size:14px;font-weight:600;text-align:center;
+  border:1px solid var(--garis-tegas);border-radius:7px;font-variant-numeric:tabular-nums}
