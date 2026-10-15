@@ -930,3 +930,8 @@ body.anti-salin-aktif [contenteditable="true"]{-webkit-user-select:text;-moz-use
 .impor-tabel tr.impor-lewati td{color:var(--tinta-lembut)}
 .impor-tabel tr.impor-nilai td:nth-child(4){font-weight:700;color:var(--hijau-terang)}
 .impor-gagal{font-size:12.5px;margin:6px 0 0;padding-left:18px}
+
+/* Dialog: tanda bila diklik di luar kotak (dialog tidak tertutup) */
+@keyframes dialog-goyang{0%,100%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}
+.dialog.dialog-goyang{animation:dialog-goyang .32s ease}
+@media (prefers-reduced-motion:reduce){.dialog.dialog-goyang{animation:none;outline:3px solid var(--kuning);outline-offset:2px}}
