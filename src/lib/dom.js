@@ -81,10 +81,18 @@ export function dialog({ judul, badan, kaki, lebar, bisaTutup }) {
     kaki && el('div', { class: 'dialog-kaki' }, kaki),
   )
 
-  const tirai = el('div', { class: 'tirai', onClick: (e) => { if (e.target === tirai) tutup() } }, kotak)
+  // Klik di luar kotak TIDAK menutup dialog (mencegah isian hilang karena
+  // salah klik). Kotak hanya bergoyang sebagai tanda: tutup lewat tombol
+  // Batal / Simpan / ✕, atau tombol Esc.
+  const goyang = () => {
+    kotak.classList.remove('dialog-goyang')
+    void kotak.offsetWidth            // ulang animasi bila diklik berkali-kali
+    kotak.classList.add('dialog-goyang')
+  }
+  const tirai = el('div', { class: 'tirai', onClick: (e) => { if (e.target === tirai) goyang() } }, kotak)
 
   function padaTombol(e) {
-    if (e.key === 'Escape') { e.preventDefault(); tutup(); return }
+    if (e.key === 'Escape') { e.preventDefault(); tutup(); return }   // Esc tetap menutup (disengaja)
 
     // Menahan fokus di dalam dialog selama terbuka
     if (e.key === 'Tab') {
