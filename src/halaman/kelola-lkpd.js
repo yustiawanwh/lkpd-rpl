@@ -43,7 +43,7 @@ function kotakFormat(nilaiAwal = '', baris = 3) {
   let bahasaKode = 'dart'
   try { bahasaKode = localStorage.getItem('bahasa_kode') || 'dart' } catch {}
   const pilihBahasa = el('select', { class: 'format-bahasa', title: 'Bahasa blok kode' },
-    ...[['dart', 'Dart'], ['js', 'JavaScript'], ['jsx', 'React'], ['nextjs', 'Next.js']]
+    ...[['dart', 'Dart'], ['js', 'JavaScript'], ['jsx', 'React'], ['nextjs', 'Next.js'], ['css', 'CSS']]
       .map(([v, t]) => el('option', { value: v, ...(v === bahasaKode ? { selected: true } : {}) }, t)))
   pilihBahasa.addEventListener('change', () => {
     bahasaKode = pilihBahasa.value
