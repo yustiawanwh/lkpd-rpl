@@ -11,6 +11,7 @@ import { halamanLkpd, halamanSuntingLkpd } from './kelola-lkpd.js'
 import { halamanNilai } from './nilai.js'
 import { halamanTigaRanah } from './ranah-nilai.js'
 import { cetakReview } from './cetak-review.js'
+import { dialogImporNilai } from './impor-nilai.js'
 import { halamanAsesmen, halamanSuntingAsesmen } from './kelola-asesmen.js'
 import { halamanHasilAsesmen } from './hasil-asesmen.js'
 import { halamanPengawasan } from './pengawasan.js'
@@ -1008,13 +1009,16 @@ async function antreanReview(wadah, penugasanId) {
           el('p', { id: 'review-hitung' }, `${pen.kelas?.nama} · ${pen.tujuan_pembelajaran?.kode}` +
                       (data.length ? ` — ${data.length} tugas dari ${jmlMurid} murid` : '')),
         ),
-        data.length ? el('div', { class: 'kepala-kanan' },
+        el('div', { class: 'kepala-kanan' },
           el('div', { gaya: { display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap' } },
-            el('button', { class: 'tbl tbl-kecil', title: 'Cetak PDF untuk koreksi offline',
-              onClick: () => cetakReview(penugasanId, pen?.tujuan_pembelajaran?.id, data) }, '🖨️ Cetak PDF'),
-            el('span', { gaya: { fontSize: '12px', color: 'var(--tinta-lembut)', margin: '0 2px' } }, 'Kelompokkan:'),
-            tombolMode('murid', 'Per Murid'),
-            tombolMode('tugas', 'Per Tugas'))) : null,
+            el('button', { class: 'tbl tbl-kecil', title: 'Impor nilai satu tugas dari berkas Excel',
+              onClick: () => dialogImporNilai(penugasanId, pen, () => antreanReview(wadah, penugasanId)) }, '📥 Impor nilai (Excel)'),
+            data.length ? [
+              el('button', { class: 'tbl tbl-kecil', title: 'Cetak PDF untuk koreksi offline',
+                onClick: () => cetakReview(penugasanId, pen?.tujuan_pembelajaran?.id, data) }, '🖨️ Cetak PDF'),
+              el('span', { gaya: { fontSize: '12px', color: 'var(--tinta-lembut)', margin: '0 2px' } }, 'Kelompokkan:'),
+              tombolMode('murid', 'Per Murid'),
+              tombolMode('tugas', 'Per Tugas')] : null)),
       ),
 
       !data.length
