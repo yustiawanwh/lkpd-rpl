@@ -180,7 +180,10 @@ const BAHASA_JS = new Set([
   'ts','typescript','tsx',
   'next','nextjs','next.js',
 ])
+const BAHASA_CSS = new Set(['css', 'scss', 'sass', 'less'])
+
 const NAMA_TAMPIL = {
+  css: 'CSS', scss: 'SCSS', sass: 'SCSS', less: 'Less',
   js: 'JavaScript', javascript: 'JavaScript', mjs: 'JavaScript', cjs: 'JavaScript',
   node: 'Node.js', nodejs: 'Node.js', jsx: 'React', react: 'React', reactjs: 'React',
   ts: 'TypeScript', typescript: 'TypeScript', tsx: 'React TS',
@@ -236,11 +239,74 @@ function warnaiJs(aman) {
   })
 }
 
+/**
+ * Pewarna CSS / SCSS. Membedakan dua konteks:
+ *   - SELEKTOR (di luar { } atau sebelum {): tag, .kelas, #id, :pseudo
+ *   - DEKLARASI (di dalam { }): properti, nilai, angka+satuan, warna #hex,
+ *     fungsi (rgb, var, calc…), !important
+ * Juga @aturan (@media, @import, @keyframes…), $variabel SCSS, --variabel,
+ * komentar, dan string. Teks SUDAH di-escape (kutip = &quot; / &#39;).
+ */
+function warnaiCss(aman) {
+  let kedalaman = 0      // jumlah { yang belum ditutup
+  let modeNilai = false  // sesudah "properti:" sampai ; atau }
+  const pola = /(\/\*[\s\S]*?\*\/|\/\/[^\n]*)|(&quot;(?:(?!&quot;)[^\n])*&quot;|&#39;(?:(?!&#39;)[^\n])*&#39;)|(&[a-z]+;|&#\d+;)|(@[\w-]+)|([{};])|(#[0-9a-fA-F]{3,8}(?![\w-]))|(!important\b)|(\$[\w-]+)|(--[\w-]+)|(-?(?:\d+\.?\d*|\.\d+)(?:%|[a-zA-Z]+)?)|(::?[\w-]+)|([.#][\w-]+)|([\w-]+)(\s*\()?|(:)/g
+  return aman.replace(pola, (m, komentar, teks, entitas, atRule, kurawal, hex, penting, varScss, varCss,
+                             angka, pseudo, selKelas, kata, kurung, titikDua, offset, semua) => {
+    if (komentar) return spanTok('komentar', komentar)
+    if (teks) return spanTok('teks', teks)
+    if (entitas) return entitas
+    if (atRule) return spanTok('kunci', atRule)
+    if (kurawal) {
+      if (kurawal === '{') { kedalaman++; modeNilai = false }
+      else if (kurawal === '}') { kedalaman = Math.max(0, kedalaman - 1); modeNilai = false }
+      else modeNilai = false
+      return kurawal
+    }
+    // Di dalam { } tetapi sebelum ":" bisa berupa properti ATAU selektor
+    // bersarang (SCSS / di dalam @media). Selektor bila "{" datang lebih dulu
+    // daripada ";" atau "}".
+    const selektorBersarang = () => {
+      const sisa = semua.slice(offset + m.length)
+      const iKurung = sisa.search(/[{;}]/)
+      return iKurung >= 0 && sisa[iKurung] === '{'
+    }
+    const diSelektor = (kedalaman === 0 && !modeNilai) || (kedalaman > 0 && !modeNilai && selektorBersarang())
+    if (hex) return spanTok(diSelektor ? 'tipe' : 'angka', hex)
+    if (penting) return spanTok('kunci', penting)
+    if (varScss) {
+      // "$warna: …" (deklarasi variabel SCSS, juga di luar { }) → sisanya nilai.
+      if (/^\s*:/.test(semua.slice(offset + m.length))) modeNilai = true
+      return spanTok('atribut', varScss)
+    }
+    if (varCss) return spanTok(diSelektor || modeNilai ? 'fungsi' : 'atribut', varCss)
+    if (angka) return spanTok('angka', angka)
+    if (pseudo) {
+      if (!diSelektor) {   // "color:red" tanpa spasi → titik dua + nilai
+        modeNilai = true
+        return ':' + pseudo.slice(1)
+      }
+      return spanTok('fungsi', pseudo)
+    }
+    if (selKelas) return spanTok('tipe', selKelas)
+    if (kata) {
+      const sisaKurung = kurung || ''
+      if (kurung) return spanTok('fungsi', kata) + sisaKurung   // rgb( var( calc( url(
+      if (diSelektor) return spanTok('tag', kata)
+      if (!modeNilai) return spanTok('atribut', kata)          // nama properti
+      return kata                                              // nilai kata kunci (red, flex, auto)
+    }
+    if (titikDua) { if (!diSelektor) modeNilai = true; return ':' }
+    return m
+  })
+}
+
 /** Ubah satu blok kode menjadi HTML berwarna yang aman. */
 export function kodeKeHtml(kode, bahasa = '') {
   const aman = escapeHtml(kode)
   let isi = aman
   if (BAHASA_DART.has(bahasa)) isi = warnaiDart(aman)
+  else if (BAHASA_CSS.has(bahasa)) isi = warnaiCss(aman)
   else if (BAHASA_JS.has(bahasa)) isi = warnaiJs(aman)
   // Bahasa lain: tampil polos (tetap di kotak kode gelap).
 
